@@ -7,5 +7,9 @@ Desktop.ini
 .vscode/
 .idea/
 
+# Browser check output
+tests/shots/
+tests/edge-profile/
+
 # Claude Code personal settings (.claude/skills/ is tracked)
 .claude/settings.local.json
