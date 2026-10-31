@@ -23,7 +23,7 @@
 - [x] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
 - [ ] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
 - [ ] localStorage 저장/불러오기, 버전 필드
-- [ ] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
+- [x] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
 - [ ] 월/주 계산 유틸 (월~일 기준)
 
 ### T2. 정산 마법사 (푸시 3)
