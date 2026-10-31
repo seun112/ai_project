@@ -13,10 +13,11 @@
 ## 초기 Todo (처음 계획)
 
 ### T0. 프로젝트 준비 (푸시 1)
-- [ ] Git 저장소 초기화, `.gitignore`
-- [ ] `PRD.md`, `TODO.md` 추가
-- [ ] `README.md` 뼈대 (소개, PRD/Todo, 변경 내역, 스킬, 느낀 점 섹션)
-- [ ] 커밋 규칙, 스킬 계획 정리
+- [x] Git 저장소 초기화, `.gitignore`
+- [x] `PRD.md`, `TODO.md` 추가
+- [x] `README.md` 뼈대 (소개, PRD/Todo, 변경 내역, 스킬, 느낀 점 섹션)
+- [x] 커밋 규칙, 스킬 계획 정리
+- [x] `todo-commit-workflow` 스킬 제작
 
 ### T1. 데이터 모델과 저장 (푸시 2)
 - [ ] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
@@ -87,3 +88,4 @@
 | T0 | 변경 | 저장소 초기화 | 새로 초기화하지 않고 원격 `main` 이력 위에서 시작 | 원격에 이미 커밋과 README가 있어서 |
 | T0 | 변경 | PRD 초과분 규칙 | PRD FR-1과 10장을 자동 다음 달 차감으로 수정 | PRD와 TODO의 내용이 달라서 |
 | T0 | 변경 | README | 합본 내용을 PRD/TODO로 분리하고 뼈대로 교체 | 문서를 한 곳에서만 관리하기 위해 |
+| T0 | 추가 | 스킬 제작 | T0에 `todo-commit-workflow` 스킬 제작 항목을 추가하고 `SKILL.md` 작성 | 스킬 제작을 T0에서 끝내기로 해서 |
