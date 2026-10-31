@@ -82,6 +82,11 @@
     padding: 2.5rem 1.5rem;
   }
 
+  .month {
+    margin: 0;
+    color: var(--ink-soft);
+  }
+
   .view h1 {
     margin: 0 0 1.5rem;
     font-size: 1.5rem;
@@ -140,6 +145,7 @@
     </nav>
 
     <main class="main">
+      <p class="month" id="month-label"></p>
       <section class="view" data-panel="dashboard">
         <h1>대시보드</h1>
         <div class="ledger"><p class="empty">이번 달 예산을 정하면 남은 돈이 여기에 표시됩니다.</p></div>
@@ -186,6 +192,67 @@ function formatWon(amount) {
   return `${(amount || 0).toLocaleString('ko-KR')}원`;
 }
 
+// ---- 날짜 유틸 ----
+
+// 날짜는 'YYYY-MM-DD', 달은 'YYYY-MM' 문자열로 다룬다.
+// toISOString은 UTC로 바뀌어 한국 시간 오전에 날짜가 밀리므로 쓰지 않는다.
+function pad2(number) {
+  return String(number).padStart(2, '0');
+}
+
+function toDateKey(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+// 오늘 날짜를 얻는 유일한 함수. 월 전환 테스트는 이 함수만 바꾼다.
+function getToday() {
+  return toDateKey(new Date());
+}
+
+function monthKeyOf(dateKey) {
+  return dateKey.slice(0, 7);
+}
+
+function addMonths(monthKey, delta) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(year, month - 1 + delta, 1);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function daysInMonth(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year, month, 0).getDate();
+}
+
+function monthDates(monthKey) {
+  return Array.from({ length: daysInMonth(monthKey) }, (_, i) => `${monthKey}-${pad2(i + 1)}`);
+}
+
+// 월요일 0 ~ 일요일 6
+function weekdayIndex(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return (new Date(year, month - 1, day).getDay() + 6) % 7;
+}
+
+// 월~일 단위로 묶는다. 달 경계에 걸친 주에는 해당 달 날짜만 담는다.
+function weeksOfMonth(monthKey) {
+  const weeks = [];
+  for (const dateKey of monthDates(monthKey)) {
+    if (weeks.length === 0 || weekdayIndex(dateKey) === 0) weeks.push([]);
+    weeks.at(-1).push(dateKey);
+  }
+  return weeks;
+}
+
+function isLockedDate(dateKey) {
+  return monthKeyOf(dateKey) < monthKeyOf(getToday());
+}
+
+function formatMonth(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number);
+  return `${year}년 ${month}월`;
+}
+
 // ---- 화면 ----
 
 function showView(name) {
@@ -199,6 +266,7 @@ function showView(name) {
 }
 
 function init() {
+  document.getElementById('month-label').textContent = formatMonth(monthKeyOf(getToday()));
   document.querySelectorAll('[data-view]').forEach((item) => {
     item.addEventListener('click', () => showView(item.dataset.view));
   });
