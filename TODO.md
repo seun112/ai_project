@@ -20,7 +20,7 @@
 - [x] `todo-commit-workflow` 스킬 제작
 
 ### T1. 데이터 모델과 저장 (푸시 2)
-- [ ] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
+- [x] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
 - [ ] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
 - [ ] localStorage 저장/불러오기, 버전 필드
 - [ ] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
