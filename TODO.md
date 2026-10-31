@@ -21,8 +21,8 @@
 
 ### T1. 데이터 모델과 저장 (푸시 2)
 - [x] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
-- [ ] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
-- [ ] localStorage 저장/불러오기, 버전 필드
+- [x] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
+- [x] localStorage 저장/불러오기, 버전 필드
 - [x] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
 - [x] 월/주 계산 유틸 (월~일 기준)
 
@@ -91,3 +91,4 @@
 | T0 | 추가 | 스킬 제작 | T0에 `todo-commit-workflow` 스킬 제작 항목을 추가하고 `SKILL.md` 작성 | 스킬 제작을 T0에서 끝내기로 해서 |
 | T1 전 | 추가 | 초기 Todo 보존 | 첫 커밋의 계획을 `docs/initial-todo.md`로 저장 | 처음 계획과 현재 Todo를 비교할 수 있게 하기 위해 |
 | T1 전 | 추가 | 스킬 원문 보존 | `frontend-design` 원문과 라이선스를 `docs/skills/`에 저장 | 플러그인 설치 없이 저장소에서 참고한 스킬을 확인할 수 있게 하기 위해 |
+| T1 | 변경 | 손상 데이터 복구 | T1에는 초기화만 넣고, 백업 JSON 가져오기는 T7에서 구현할 때 이 오류 화면에 연결 | JSON 가져오기가 T7의 선택 항목이라서 |

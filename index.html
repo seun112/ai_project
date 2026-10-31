@@ -113,6 +113,31 @@
     line-height: var(--row);
   }
 
+  .notice {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    background: var(--ink);
+    color: var(--surface);
+    text-align: center;
+  }
+
+  .recovery {
+    max-width: 32rem;
+    margin-inline: auto;
+    padding: 4rem 1rem;
+  }
+  .recovery h1 { margin: 0 0 0.75rem; font-size: 1.5rem; line-height: 1.3; }
+  .recovery p { margin: 0 0 1.25rem; }
+
+  .button {
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .button-solid { background: var(--ink); color: var(--surface); }
+  .button-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
   @media (max-width: 40rem) {
     .app { display: block; }
 
@@ -134,6 +159,21 @@
 </style>
 </head>
 <body>
+  <p class="notice" id="save-error" role="alert" hidden>저장하지 못했습니다. 브라우저 저장 공간을 확인한 뒤 다시 시도하세요.</p>
+
+  <section class="recovery" id="recovery" hidden>
+    <h1>저장된 데이터를 읽을 수 없습니다</h1>
+    <p>데이터가 손상되었거나 지원하지 않는 형식입니다. 저장된 원본은 지우지 않았습니다.</p>
+    <button class="button" id="reset-start" type="button">데이터 초기화</button>
+    <div id="reset-confirm" role="alert" hidden>
+      <p>모든 데이터가 삭제되고 되돌릴 수 없습니다.</p>
+      <div class="button-row">
+        <button class="button button-solid" id="reset-run" type="button">모두 삭제하고 새로 시작</button>
+        <button class="button" id="reset-cancel" type="button">취소</button>
+      </div>
+    </div>
+  </section>
+
   <div class="app" id="app">
     <nav class="nav" aria-label="메뉴">
       <p class="brand">생활비 통장</p>
@@ -171,6 +211,12 @@
 
 <script>
 'use strict';
+
+// ---- 상수 ----
+
+const STORAGE_KEY = 'living-budget';
+const DATA_VERSION = 1;
+const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '기타'];
 
 // ---- 금액 유틸 ----
 
@@ -253,6 +299,80 @@ function formatMonth(monthKey) {
   return `${year}년 ${month}월`;
 }
 
+// ---- 저장소 ----
+
+let state = null;
+
+function createId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createEmptyData() {
+  return {
+    version: DATA_VERSION,
+    categories: DEFAULT_CATEGORIES.map((name) => ({ id: createId('cat'), name, hidden: false })),
+    months: {},
+    expenses: [],
+    piggy: { balance: 0, history: [] },
+    unsettled: [],
+  };
+}
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidCategory(category) {
+  return isPlainObject(category)
+    && typeof category.id === 'string'
+    && typeof category.name === 'string'
+    && typeof category.hidden === 'boolean';
+}
+
+function isValidData(data) {
+  return isPlainObject(data)
+    && data.version === DATA_VERSION
+    && Array.isArray(data.categories)
+    && data.categories.every(isValidCategory)
+    && isPlainObject(data.months)
+    && Array.isArray(data.expenses)
+    && isPlainObject(data.piggy)
+    && Number.isSafeInteger(data.piggy.balance)
+    && Array.isArray(data.piggy.history)
+    && Array.isArray(data.unsettled);
+}
+
+// 손상된 값은 읽기만 하고 덮어쓰지 않는다. 지우는 것은 사용자가 고른다.
+function loadData() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return { status: 'empty', data: createEmptyData() };
+  }
+  if (raw === null) return { status: 'empty', data: createEmptyData() };
+
+  try {
+    const data = JSON.parse(raw);
+    return isValidData(data) ? { status: 'ok', data } : { status: 'corrupt' };
+  } catch {
+    return { status: 'corrupt' };
+  }
+}
+
+function saveData(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function saveState() {
+  document.getElementById('save-error').hidden = saveData(state);
+}
+
 // ---- 화면 ----
 
 function showView(name) {
@@ -265,11 +385,39 @@ function showView(name) {
   });
 }
 
+function showRecovery() {
+  document.getElementById('app').hidden = true;
+  document.getElementById('recovery').hidden = false;
+}
+
+function setResetConfirm(open) {
+  document.getElementById('reset-start').hidden = open;
+  document.getElementById('reset-confirm').hidden = !open;
+}
+
+function resetData() {
+  state = createEmptyData();
+  saveState();
+  document.getElementById('recovery').hidden = true;
+  document.getElementById('app').hidden = false;
+}
+
 function init() {
   document.getElementById('month-label').textContent = formatMonth(monthKeyOf(getToday()));
   document.querySelectorAll('[data-view]').forEach((item) => {
     item.addEventListener('click', () => showView(item.dataset.view));
   });
+  document.getElementById('reset-start').addEventListener('click', () => setResetConfirm(true));
+  document.getElementById('reset-cancel').addEventListener('click', () => setResetConfirm(false));
+  document.getElementById('reset-run').addEventListener('click', resetData);
+
+  const result = loadData();
+  if (result.status === 'corrupt') {
+    showRecovery();
+    return;
+  }
+  state = result.data;
+  if (result.status === 'empty') saveState();
 }
 
 init();
