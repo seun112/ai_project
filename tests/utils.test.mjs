@@ -139,6 +139,43 @@ test('loadData 상태 구분', { skip: !has('loadData') }, () => {
   }
 });
 
+test('formatSigned', { skip: !has('formatSigned') }, () => {
+  assert.equal(call('formatSigned(45000)'), '+45,000원');
+  assert.equal(call('formatSigned(0)'), '0원');
+  assert.equal(call('formatSigned(-50000)'), '-50,000원');
+});
+
+test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
+  const months = {
+    '2026-08': { total: 100, settled: true },
+    '2026-09': { total: 200, settled: false },
+    '2026-10': { total: 1000, settled: true },
+    '2026-12': { total: 300, settled: true },
+  };
+  const data = q({ months, expenses: [
+    { date: '2026-10-03', amount: 300 },
+    { date: '2026-10-31', amount: 900 },
+    { date: '2026-11-01', amount: 50 },
+  ] });
+  const is = (expr) => call(expr.replaceAll('DATA', data));
+
+  assert.equal(call(`lastSettledMonth({ months: {} }, '2026-11')`), null);
+  assert.equal(is(`lastSettledMonth(DATA, '2026-08')`), null, '이전 정산 없음');
+  assert.equal(is(`lastSettledMonth(DATA, '2026-11')`), '2026-10', '미래 달 제외');
+  assert.equal(is(`lastSettledMonth(DATA, '2026-10')`), '2026-08', '미정산 달 건너뜀');
+  assert.equal(is(`lastSettledMonth(DATA, '2027-03')`), '2026-12', '건너뛴 달');
+
+  assert.equal(is(`needsSettlement(DATA, '2026-10')`), false);
+  assert.equal(is(`needsSettlement(DATA, '2026-09')`), true);
+  assert.equal(is(`needsSettlement(DATA, '2026-11')`), true);
+
+  assert.equal(is(`monthSpent(DATA, '2026-10')`), 1200);
+  assert.equal(is(`monthBalance(DATA, '2026-10')`), -200);
+
+  assert.deepEqual(is(`wizardSteps(DATA, '2026-08')`), ['total', 'allocate']);
+  assert.deepEqual(is(`wizardSteps(DATA, '2026-11')`), ['result', 'total', 'allocate']);
+});
+
 test('saveData 실패를 false로 알린다', { skip: !has('saveData') }, () => {
   const t = load();
   vm.runInContext(`localStorage.setItem = () => { throw new Error('QuotaExceededError'); };`, t.ctx);

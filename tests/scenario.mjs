@@ -5,7 +5,25 @@ const isHidden = (id) => `document.getElementById('${id}').hidden`;
 const raw = `localStorage.getItem('living-budget')`;
 const setRaw = (value) => `localStorage.setItem('living-budget', ${JSON.stringify(value)})`;
 
-export default async function ({ evaluate, reload, size, shot, check }) {
+// 이번 달을 정산 완료 상태로 만들어 마법사 없이 앱에 들어간다.
+const seedSettled = `(() => {
+  const data = JSON.parse(localStorage.getItem('living-budget'));
+  const allocations = Object.fromEntries(data.categories.map((c) => [c.id, 250000]));
+  data.months[monthKeyOf(getToday())] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations, settled: true };
+  localStorage.setItem('living-budget', JSON.stringify(data));
+})()`;
+
+export default async function ({ evaluate, reload, size, shot, check, setToday }) {
+  // 첫 실행 흐름
+  check('첫 실행: 마법사 표시, 앱 숨김', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('app'))));
+  check('첫 실행: 2단계로 시작', /정산 1 \/ 2$/.test(await evaluate(`document.getElementById('wizard-progress').textContent`)));
+  check('첫 실행: 지난달 결과 없음', await evaluate(`document.querySelector('[data-step="result"]').hidden`));
+  check('첫 실행: 이전 버튼 없음', await evaluate(isHidden('wizard-back')));
+  console.log('shot', await shot('wizard-first'));
+
+  await evaluate(seedSettled);
+  await reload();
+  check('정산 완료 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
   check('처음 화면은 대시보드', (await evaluate(visible)) === 'dashboard');
   check('이번 달 표시', /^\d{4}년 \d{1,2}월$/.test(await evaluate(`document.getElementById('month-label').textContent`)));
   for (const name of ['calendar', 'weekly', 'piggy', 'settings', 'dashboard']) {
@@ -15,7 +33,7 @@ export default async function ({ evaluate, reload, size, shot, check }) {
 
   // 첫 실행 저장과 새로고침 유지
   const first = await evaluate(raw);
-  check('첫 실행에 기본 데이터 저장', first !== null && JSON.parse(first).categories.length === 4);
+  check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 4);
   await reload();
   check('새로고침 후 분류 id 유지', (await evaluate(raw)) === first);
   await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; ${setRaw('')}; localStorage.setItem('living-budget', JSON.stringify(d));`);
@@ -49,11 +67,12 @@ export default async function ({ evaluate, reload, size, shot, check }) {
   await evaluate(`document.getElementById('reset-start').click()`);
   console.log('shot', await shot('recovery-confirm'));
   await evaluate(`document.getElementById('reset-run').click()`);
-  check('초기화 후 앱 표시', !(await evaluate(isHidden('app'))) && (await evaluate(isHidden('recovery'))));
+  check('초기화 후 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))));
   const after = JSON.parse(await evaluate(raw));
   check('초기화 후 빈 데이터 저장', after.version === 1 && after.categories.length === 4 && after.piggy.balance === 0);
   await reload();
-  check('초기화 후 새로고침해도 앱 표시', !(await evaluate(isHidden('app'))));
+  await reload();
+  check('초기화 후 새로고침해도 마법사 표시', !(await evaluate(isHidden('wizard'))));
 
   // 저장 실패 안내
   await evaluate(`Storage.prototype.setItem = () => { throw new Error('quota'); }; saveState();`);
@@ -62,4 +81,30 @@ export default async function ({ evaluate, reload, size, shot, check }) {
   await reload();
   await evaluate(`saveState();`);
   check('저장 성공하면 안내 사라짐', await evaluate(isHidden('save-error')));
+
+  // 다음 달 접속
+  await size(1200, 800);
+  await setToday('2026-11-15');
+  await reload();
+  await evaluate(seedSettled);
+  await setToday('2026-12-02');
+  await reload();
+  const progress = () => evaluate(`document.getElementById('wizard-progress').textContent`);
+  check('다음 달: 3단계로 시작', (await progress()) === '2026년 12월 정산 1 / 3', await progress());
+  check('다음 달: 지난달 결과 표시', (await evaluate(`document.getElementById('result-title').textContent`)) === '2026년 11월 결과');
+  check('다음 달: 남은 금액 부호 표시', (await evaluate(`document.getElementById('result-balance').textContent`)) === '+1,000,000원');
+  console.log('shot', await shot('wizard-result'));
+  await evaluate(`document.getElementById('wizard-next').click()`);
+  check('다음 단계로 이동', (await progress()) === '2026년 12월 정산 2 / 3');
+  check('이전 버튼 표시', !(await evaluate(isHidden('wizard-back'))));
+  await evaluate(`document.getElementById('wizard-back').click()`);
+  check('이전 단계로 이동', (await progress()) === '2026년 12월 정산 1 / 3');
+
+  // 탭을 열어둔 채 달이 바뀐 경우
+  await setToday('2026-11-20');
+  await reload();
+  check('이번 달이 정산되어 있으면 앱 표시', !(await evaluate(isHidden('app'))));
+  await evaluate(`getToday = () => '2026-12-01'; document.dispatchEvent(new Event('visibilitychange'));`);
+  check('탭 복귀 시 달이 바뀌었으면 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('app'))));
+  await setToday(null);
 }

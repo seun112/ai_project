@@ -60,6 +60,26 @@ const shot = async (name) => {
   return file;
 };
 
+// 다음 페이지 로드부터 Date의 오늘을 고정한다. null이면 실제 날짜로 돌아간다.
+let dateScript = null;
+const setToday = async (dateKey) => {
+  if (dateScript !== null) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: dateScript });
+  dateScript = null;
+  if (dateKey === null) return;
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const r = await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(() => {
+      const Real = Date;
+      const fixed = new Real(${y}, ${m - 1}, ${d}, 12).getTime();
+      globalThis.Date = class extends Real {
+        constructor(...args) { if (args.length) super(...args); else super(fixed); }
+        static now() { return fixed; }
+      };
+    })();`,
+  });
+  dateScript = r.result.identifier;
+};
+
 let failed = 0;
 const check = (label, ok, detail = '') => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'} ${label}${detail !== '' ? ` -> ${detail}` : ''}`); };
 
@@ -72,7 +92,7 @@ await reload();
 
 const scenario = await import(pathToFileURL(join(here, 'scenario.mjs')).href);
 try {
-  await scenario.default({ evaluate, reload, size, shot, check });
+  await scenario.default({ evaluate, reload, size, shot, check, setToday });
   check('콘솔 오류 없음', problems.length === 0, problems.join(' | '));
 } finally {
   ws.close();
