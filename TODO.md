@@ -89,3 +89,4 @@
 | T0 | 변경 | PRD 초과분 규칙 | PRD FR-1과 10장을 자동 다음 달 차감으로 수정 | PRD와 TODO의 내용이 달라서 |
 | T0 | 변경 | README | 합본 내용을 PRD/TODO로 분리하고 뼈대로 교체 | 문서를 한 곳에서만 관리하기 위해 |
 | T0 | 추가 | 스킬 제작 | T0에 `todo-commit-workflow` 스킬 제작 항목을 추가하고 `SKILL.md` 작성 | 스킬 제작을 T0에서 끝내기로 해서 |
+| T1 전 | 추가 | 초기 Todo 보존 | 첫 커밋의 계획을 `docs/initial-todo.md`로 저장 | 처음 계획과 현재 Todo를 비교할 수 있게 하기 위해 |
