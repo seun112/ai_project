@@ -200,7 +200,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .piggy-amt { font-size: 24px; }
 .day-total { font-size: 28px; line-height: 1.3; }
 .cal-side { word-break: keep-all; }
-.sec-title.tight { margin-bottom: 6px; }
+.entry .entry-title { font-size: 18px; }.sec-title.tight { margin-bottom: 6px; }
 .dlg-title { display: flex; align-items: center; gap: 12px; }
 .dlg-title h2 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 30px; line-height: 1.25; }
 .step { display: flex; flex-direction: column; gap: 16px; }
@@ -687,6 +687,13 @@ function deleteExpense(data, id) {
   return true;
 }
 
+function updateExpense(data, id, { categoryId, amount, memo }) {
+  const target = data.expenses.find((expense) => expense.id === id);
+  if (target === undefined || !canEditDate(target.date)) return false;
+  Object.assign(target, { categoryId, amount, memo });
+  return true;
+}
+
 function daySpent(data, dateKey) {
   return data.expenses
     .filter((expense) => expense.date === dateKey)
@@ -977,8 +984,8 @@ function handleSettleSubmit(event) {
 
 const dashboard = { categoryId: '', error: '' };
 
-function categoryChips(categories, selectedId) {
-  return categories.map(({ id, name }) => `<button class="pill" type="button" data-act="pick-category" data-id="${escapeHtml(id)}" aria-pressed="${id === selectedId}">${escapeHtml(name)}</button>`).join('');
+function categoryChips(categories, selectedId, act = 'pick-category') {
+  return categories.map(({ id, name }) => `<button class="pill" type="button" data-act="${act}" data-id="${escapeHtml(id)}" aria-pressed="${id === selectedId}">${escapeHtml(name)}</button>`).join('');
 }
 
 function todayRows(today) {
@@ -1096,7 +1103,9 @@ function handleDashboardKeydown(event) {
 
 // ---- 달력 ----
 
-const calendar = { month: '', selected: null };
+const calendar = { month: '', selected: null, editId: null, editCategory: '' };
+
+const ICON_EDIT = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13 L3.6 10.4 L11.2 2.8 L13.2 4.8 L5.6 12.4 Z" stroke-width="2" stroke-linejoin="round" fill="none"></path></svg>';
 
 function dayCell(dateKey, amount, today) {
   const day = Number(dateKey.slice(8));
@@ -1109,15 +1118,39 @@ function dayCell(dateKey, amount, today) {
   return `<button class="${classes}" type="button" data-act="cal-day" data-date="${dateKey}" aria-pressed="${calendar.selected === dateKey}" aria-label="${label}"><span class="n">${day}${isToday ? '<small> 오늘</small>' : ''}</span>${shown}</button>`;
 }
 
-function dayRow({ categoryId, amount, memo }) {
-  return `<li class="line"><span class="tag">${escapeHtml(categoryName(state, categoryId))}</span><span class="grow">${escapeHtml(memo || '메모 없음')}</span><span class="tnum">${formatWon(amount)}</span></li>`;
+function editBox({ amount, memo }) {
+  return `<li class="entry">
+    <p class="sec-title entry-title">지출 수정</p>
+    <div class="pills" role="group" aria-label="분류">${categoryChips(visibleCategories(state), calendar.editCategory, 'cal-edit-category')}</div>
+    <div class="fields">
+      <div class="amt-wrap"><label class="sr" for="ce-amt">금액</label><input class="field right full" id="ce-amt" inputmode="numeric" autocomplete="off" value="${amount.toLocaleString('ko-KR')}"><span>원</span></div>
+      <div class="memo-wrap"><label class="sr" for="ce-memo">메모</label><input class="field full" id="ce-memo" maxlength="30" autocomplete="off" value="${escapeHtml(memo)}"></div>
+    </div>
+    <p class="err" id="ce-err" role="alert" hidden></p>
+    <div class="actions">
+      <button class="btn" type="button" data-act="cal-edit-cancel">취소</button>
+      <button class="btn go" type="button" data-act="cal-edit-save">저장</button>
+    </div>
+  </li>`;
+}
+
+function dayRow(expense, canEdit) {
+  const { id, categoryId, amount, memo } = expense;
+  if (canEdit && calendar.editId === id) return editBox(expense);
+  const safeId = escapeHtml(id);
+  const label = escapeHtml(memo || '지출');
+  const buttons = canEdit
+    ? `<button class="x" type="button" data-act="cal-edit" data-id="${safeId}" aria-label="${label} 수정">${ICON_EDIT}</button><button class="x" type="button" data-act="cal-delete" data-id="${safeId}" aria-label="${label} 삭제">${ICON_X}</button>`
+    : '';
+  return `<li class="line"><span class="tag">${escapeHtml(categoryName(state, categoryId))}</span><span class="grow">${escapeHtml(memo || '메모 없음')}</span><span class="tnum">${formatWon(amount)}</span>${buttons}</li>`;
 }
 
 function dayDetail() {
   const { month, selected } = calendar;
   if (selected === null || monthKeyOf(selected) !== month) return '<p class="empty">날짜를 누르면 그날 쓴 내역이 여기에 나와요.</p>';
+  const canEdit = canEditDate(selected);
   const items = state.expenses.filter((expense) => expense.date === selected);
-  const rows = items.map(dayRow).join('') || '<li class="empty">이 날은 쓴 돈이 없어요.</li>';
+  const rows = items.map((expense) => dayRow(expense, canEdit)).join('') || '<li class="empty">이 날은 쓴 돈이 없어요.</li>';
   return `<div class="head-row"><span class="chip">${formatDay(selected)}</span><strong class="big day-total" id="day-total">${formatWon(daySpent(state, selected))}</strong></div>
     <ul class="list" id="day-list" aria-label="${formatDay(selected)} 지출 내역">${rows}</ul>`;
 }
@@ -1155,6 +1188,7 @@ function openCalendar() {
   const today = getToday();
   calendar.month = monthKeyOf(today);
   calendar.selected = today;
+  calendar.editId = null;
   renderCalendar();
 }
 
@@ -1162,22 +1196,89 @@ function moveCalendar(delta) {
   const today = getToday();
   calendar.month = addMonths(calendar.month, delta);
   calendar.selected = calendar.month === monthKeyOf(today) ? today : null;
+  calendar.editId = null;
   renderCalendar();
+}
+
+function focusSelectedDay() {
+  document.querySelector(`[data-date="${calendar.selected}"]`)?.focus();
+}
+
+// 금액 칸을 표시하고 포커스를 옮긴다. 상자를 다시 그리지 않아 입력값이 남는다.
+function showCalendarError(prefix, message) {
+  const error = document.getElementById(`${prefix}-err`);
+  const amount = document.getElementById(`${prefix}-amt`);
+  error.textContent = message;
+  error.hidden = false;
+  amount.setAttribute('aria-invalid', 'true');
+  amount.focus();
+}
+
+function saveCalendarEdit() {
+  const amount = document.getElementById('ce-amt').value;
+  const memo = document.getElementById('ce-memo').value.trim();
+  const message = expenseError(calendar.editCategory, amount);
+  if (message !== '') {
+    showCalendarError('ce', message);
+    return;
+  }
+  updateExpense(state, calendar.editId, { categoryId: calendar.editCategory, amount: parseAmount(amount).value, memo });
+  calendar.editId = null;
+  saveState();
+  renderCalendar();
+  focusSelectedDay();
+}
+
+function startCalendarEdit(id) {
+  calendar.editId = id;
+  calendar.editCategory = state.expenses.find((expense) => expense.id === id)?.categoryId ?? '';
+  renderCalendar();
+  document.getElementById('ce-amt')?.focus();
+}
+
+function pickChip(button) {
+  button.parentNode.querySelectorAll('.pill').forEach((chip) => {
+    chip.setAttribute('aria-pressed', String(chip === button));
+  });
 }
 
 function handleCalendarClick(event) {
   const button = event.target.closest('[data-act]');
   if (button === null || blockedByNewMonth()) return;
-  const { act, date } = button.dataset;
+  const { act, date, id } = button.dataset;
   if (act === 'cal-day') {
     calendar.selected = date;
+    calendar.editId = null;
     renderCalendar();
-    document.querySelector(`[data-date="${date}"]`).focus();
+    focusSelectedDay();
+  }
+  if (act === 'cal-edit') startCalendarEdit(id);
+  if (act === 'cal-edit-save') saveCalendarEdit();
+  if (act === 'cal-edit-cancel') {
+    calendar.editId = null;
+    renderCalendar();
+    focusSelectedDay();
+  }
+  if (act === 'cal-edit-category') {
+    calendar.editCategory = id;
+    pickChip(button);
+  }
+  if (act === 'cal-delete') {
+    deleteExpense(state, id);
+    saveState();
+    renderCalendar();
+    focusSelectedDay();
   }
   if (act === 'cal-prev' || act === 'cal-next') {
     moveCalendar(act === 'cal-prev' ? -1 : 1);
     (document.querySelector(`[data-act="${act}"]:not(:disabled)`) ?? document.querySelector('.nbtn:not(:disabled)'))?.focus();
   }
+}
+
+function handleCalendarKeydown(event) {
+  if (event.key !== 'Enter' || !['ce-amt', 'ce-memo'].includes(event.target.id)) return;
+  event.preventDefault();
+  if (!blockedByNewMonth()) saveCalendarEdit();
 }
 
 // ---- 화면 ----
@@ -1249,7 +1350,9 @@ function init() {
   const dashboardPanel = document.querySelector('[data-panel="dashboard"]');
   dashboardPanel.addEventListener('click', handleDashboardClick);
   dashboardPanel.addEventListener('keydown', handleDashboardKeydown);
-  document.querySelector('[data-panel="calendar"]').addEventListener('click', handleCalendarClick);
+  const calendarPanel = document.querySelector('[data-panel="calendar"]');
+  calendarPanel.addEventListener('click', handleCalendarClick);
+  calendarPanel.addEventListener('keydown', handleCalendarKeydown);
   document.addEventListener('visibilitychange', () => {
     if (state !== null && document.visibilityState === 'visible') enterApp();
   });

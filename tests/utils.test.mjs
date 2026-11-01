@@ -355,6 +355,24 @@ test('바꿀 수 없는 날짜의 지출은 추가·삭제되지 않는다', { s
   assert.deepEqual(result, { lastMonth: false, future: false, removeOld: false, removeNone: false, count: 1 });
 });
 
+test('updateExpense', { skip: !has('updateExpense') }, () => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  const result = t.call(`(() => {
+    const d = { expenses: [
+      { id: 'now', date: '2026-11-03', categoryId: 'a', amount: 100, memo: '전' },
+      { id: 'old', date: '2026-10-03', categoryId: 'a', amount: 200, memo: '전' },
+    ] };
+    const change = { categoryId: 'b', amount: 300, memo: '후' };
+    return { now: updateExpense(d, 'now', change), old: updateExpense(d, 'old', change), none: updateExpense(d, 'zz', change), expenses: d.expenses };
+  })()`);
+  assert.equal(result.now, true);
+  assert.equal(result.old, false, '지난달 기록은 수정 불가');
+  assert.equal(result.none, false);
+  assert.deepEqual(result.expenses[0], { id: 'now', date: '2026-11-03', categoryId: 'b', amount: 300, memo: '후' }, '날짜는 그대로');
+  assert.deepEqual(result.expenses[1], { id: 'old', date: '2026-10-03', categoryId: 'a', amount: 200, memo: '전' });
+});
+
 test('지출 추가와 삭제', { skip: !has('addExpense') }, () => {
   const t = load();
   vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
