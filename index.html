@@ -224,7 +224,18 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .result .amt { margin-left: auto; }
 .dlg-title svg { flex: none; }
 .dialog-in { word-break: keep-all; }
+.cal-head, .head-row { flex-wrap: wrap; }
+.day { min-width: 0; overflow: hidden; }
 @media (max-width: 560px) {
+  .wrap { padding: 24px 8px 40px; }
+  .book { padding: 6px; }
+  .inner { padding: 14px 8px; }
+  .cal-grid { gap: 3px; }
+  .cal-nav h2 { min-width: 0; }
+  .day { padding: 3px; border-width: 1px; }
+  .day .n small { display: none; }
+  .day .a { font-size: 10px; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
+  .line { flex-wrap: wrap; padding: 6px 0; }
   .total-box .big { font-size: 26px; }
   .opt .more { padding-left: 0; }
   .opt .unit .field { width: 120px; }
@@ -924,6 +935,7 @@ function saveSettle() {
   settle = null;
   saveState();
   enterApp();
+  showView('dashboard');
 }
 
 function renderSettle() {
@@ -1103,7 +1115,7 @@ function handleDashboardKeydown(event) {
 
 // ---- 달력 ----
 
-const calendar = { month: '', selected: null, editId: null, editCategory: '' };
+const calendar = { month: '', selected: null, editId: null, editCategory: '', addCategory: '' };
 
 const ICON_EDIT = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13 L3.6 10.4 L11.2 2.8 L13.2 4.8 L5.6 12.4 Z" stroke-width="2" stroke-linejoin="round" fill="none"></path></svg>';
 
@@ -1145,6 +1157,21 @@ function dayRow(expense, canEdit) {
   return `<li class="line"><span class="tag">${escapeHtml(categoryName(state, categoryId))}</span><span class="grow">${escapeHtml(memo || '메모 없음')}</span><span class="tnum">${formatWon(amount)}</span>${buttons}</li>`;
 }
 
+function addBox() {
+  const categories = visibleCategories(state);
+  if (!categories.some(({ id }) => id === calendar.addCategory)) calendar.addCategory = categories[0]?.id ?? '';
+  return `<div class="entry">
+    <p class="sec-title entry-title">이 날 지출 추가</p>
+    <div class="pills" role="group" aria-label="분류">${categoryChips(categories, calendar.addCategory, 'cal-add-category')}</div>
+    <div class="fields">
+      <div class="amt-wrap"><label class="sr" for="cn-amt">금액</label><input class="field right full" id="cn-amt" inputmode="numeric" placeholder="금액" autocomplete="off"><span>원</span></div>
+      <div class="memo-wrap"><label class="sr" for="cn-memo">메모</label><input class="field full" id="cn-memo" maxlength="30" placeholder="메모 (예: 점심)" autocomplete="off"></div>
+    </div>
+    <p class="err" id="cn-err" role="alert" hidden></p>
+    <div class="actions"><button class="btn go" type="button" data-act="cal-add">추가</button></div>
+  </div>`;
+}
+
 function dayDetail() {
   const { month, selected } = calendar;
   if (selected === null || monthKeyOf(selected) !== month) return '<p class="empty">날짜를 누르면 그날 쓴 내역이 여기에 나와요.</p>';
@@ -1152,7 +1179,8 @@ function dayDetail() {
   const items = state.expenses.filter((expense) => expense.date === selected);
   const rows = items.map((expense) => dayRow(expense, canEdit)).join('') || '<li class="empty">이 날은 쓴 돈이 없어요.</li>';
   return `<div class="head-row"><span class="chip">${formatDay(selected)}</span><strong class="big day-total" id="day-total">${formatWon(daySpent(state, selected))}</strong></div>
-    <ul class="list" id="day-list" aria-label="${formatDay(selected)} 지출 내역">${rows}</ul>`;
+    <ul class="list" id="day-list" aria-label="${formatDay(selected)} 지출 내역">${rows}</ul>
+    ${canEdit ? addBox() : ''}${selected > getToday() ? '<span class="sub" id="cal-future">아직 오지 않은 날이에요.</span>' : ''}`;
 }
 
 function renderCalendar() {
@@ -1166,6 +1194,9 @@ function renderCalendar() {
   const spent = monthSpent(state, month);
   const remain = isCurrent ? `<span class="sub" id="cal-remain">이번 달 남은 돈 ${formatWon(state.months[month].total - spent)}</span>` : '';
   const lock = month < currentMonth ? '<div><span class="lock" id="cal-lock">지난달 기록 · 볼 수만 있어요</span></div>' : '';
+  // 다시 그려도 입력 중인 금액과 메모는 남긴다. 날짜를 옮기면 clearAddBox로 먼저 비운다.
+  const draftAmount = document.getElementById('cn-amt')?.value ?? '';
+  const draftMemo = document.getElementById('cn-memo')?.value ?? '';
   document.querySelector('[data-panel="calendar"]').innerHTML = `<div class="cal-wrap">
     <div class="cal-main">
       <div class="cal-head">
@@ -1181,6 +1212,18 @@ function renderCalendar() {
     </div>
     <div class="cal-side">${dayDetail()}${remain}${lock}</div>
   </div>`;
+  const amountInput = document.getElementById('cn-amt');
+  if (amountInput !== null) {
+    amountInput.value = draftAmount;
+    document.getElementById('cn-memo').value = draftMemo;
+  }
+}
+
+function clearAddBox() {
+  for (const id of ['cn-amt', 'cn-memo']) {
+    const input = document.getElementById(id);
+    if (input !== null) input.value = '';
+  }
 }
 
 // 탭을 열면 이번 달의 오늘을 고른 상태로 시작한다.
@@ -1189,6 +1232,7 @@ function openCalendar() {
   calendar.month = monthKeyOf(today);
   calendar.selected = today;
   calendar.editId = null;
+  clearAddBox();
   renderCalendar();
 }
 
@@ -1197,6 +1241,7 @@ function moveCalendar(delta) {
   calendar.month = addMonths(calendar.month, delta);
   calendar.selected = calendar.month === monthKeyOf(today) ? today : null;
   calendar.editId = null;
+  clearAddBox();
   renderCalendar();
 }
 
@@ -1229,6 +1274,21 @@ function saveCalendarEdit() {
   focusSelectedDay();
 }
 
+function submitCalendarAdd() {
+  const amount = document.getElementById('cn-amt').value;
+  const memo = document.getElementById('cn-memo').value.trim();
+  const message = expenseError(calendar.addCategory, amount);
+  if (message !== '') {
+    showCalendarError('cn', message);
+    return;
+  }
+  addExpense(state, { date: calendar.selected, categoryId: calendar.addCategory, amount: parseAmount(amount).value, memo });
+  clearAddBox();
+  saveState();
+  renderCalendar();
+  document.getElementById('cn-amt').focus();
+}
+
 function startCalendarEdit(id) {
   calendar.editId = id;
   calendar.editCategory = state.expenses.find((expense) => expense.id === id)?.categoryId ?? '';
@@ -1249,8 +1309,14 @@ function handleCalendarClick(event) {
   if (act === 'cal-day') {
     calendar.selected = date;
     calendar.editId = null;
+    clearAddBox();
     renderCalendar();
     focusSelectedDay();
+  }
+  if (act === 'cal-add') submitCalendarAdd();
+  if (act === 'cal-add-category') {
+    calendar.addCategory = id;
+    pickChip(button);
   }
   if (act === 'cal-edit') startCalendarEdit(id);
   if (act === 'cal-edit-save') saveCalendarEdit();
@@ -1276,9 +1342,11 @@ function handleCalendarClick(event) {
 }
 
 function handleCalendarKeydown(event) {
-  if (event.key !== 'Enter' || !['ce-amt', 'ce-memo'].includes(event.target.id)) return;
+  if (event.key !== 'Enter' || !['ce-amt', 'ce-memo', 'cn-amt', 'cn-memo'].includes(event.target.id)) return;
   event.preventDefault();
-  if (!blockedByNewMonth()) saveCalendarEdit();
+  if (blockedByNewMonth()) return;
+  if (event.target.id.startsWith('ce-')) saveCalendarEdit();
+  else submitCalendarAdd();
 }
 
 // ---- 화면 ----

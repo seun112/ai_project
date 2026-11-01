@@ -585,5 +585,72 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`document.querySelector('[data-act="cal-prev"]').click()`);
   await evaluate(`${dayBtn('2026-10-20')}.click()`);
   check('지난달 내역에는 버튼 없음', await evaluate(`document.querySelector('#day-list button') === null`));
+  check('지난달에는 추가 상자 없음', await evaluate(`document.getElementById('cn-amt') === null`));
+
+  // 달력: 지출 추가
+  await evaluate(`document.querySelector('[data-act="cal-next"]').click()`);
+  await evaluate(`${dayBtn('2026-11-05')}.click()`);
+  check('오늘 이전 날짜에 추가 상자', (await evaluate(`document.querySelector('.cal-side .entry-title').textContent`)) === '이 날 지출 추가');
+  check('추가 상자는 첫 분류 선택', (await evaluate(`document.querySelector('[data-act="cal-add-category"][aria-pressed="true"]').textContent`)) === '식비');
+  check('오늘 이전 날짜에 미래 문구 없음', await evaluate(`document.getElementById('cal-future') === null`));
+  for (const [amount, message] of [['1.5', '금액은 원 단위 숫자만 입력할 수 있어요.'], ['', '금액은 원 단위 숫자만 입력할 수 있어요.'], ['0', '1원 이상 입력해 주세요.']]) {
+    await evaluate(type('cn-amt', amount));
+    await evaluate(calBtn('cal-add'));
+    check(`추가 금액 "${amount}": 막히고 안내`, (await evaluate(text('cn-err'))) === message && (await evaluate(`document.getElementById('cn-amt').getAttribute('aria-invalid')`)) === 'true');
+  }
+  const countAdd = (await expenses()).length;
+  await evaluate(type('cn-amt', '20,000'));
+  await evaluate(type('cn-memo', '빠뜨린 지출'));
+  await evaluate(calBtn('cal-add-category', 2));
+  await evaluate(calBtn('cal-add'));
+  const addedOne = (await expenses()).at(-1);
+  check('고른 날짜로 추가', (await expenses()).length === countAdd + 1 && addedOne.date === '2026-11-05' && addedOne.amount === 20000 && addedOne.memo === '빠뜨린 지출');
+  check('고른 분류로 추가', (await evaluate(`state.categories[2].id`)) === addedOne.categoryId);
+  check('추가가 칸 합계와 내역에 바로 반영', (await evaluate(dayText('2026-11-05'))) === '520,000원' && (await evaluate(`document.querySelectorAll('#day-list .line').length`)) === 1);
+  check('추가 후 입력칸이 비고 포커스 유지', (await evaluate(value('cn-amt'))) === '' && (await evaluate(`document.activeElement.id`)) === 'cn-amt');
+  await evaluate(type('cn-amt', '1,000'));
+  check('추가 상자 Enter로 추가', await evaluate(enter('#cn-amt')));
+  check('Enter 추가 반영', (await evaluate(text('day-total'))) === '21,000원');
+  await evaluate(type('cn-amt', '777'));
+  await evaluate(calBtn('cal-edit'));
+  await evaluate(calBtn('cal-edit-cancel'));
+  check('수정을 취소해도 입력 중인 금액 유지', (await evaluate(value('cn-amt'))) === '777');
+  await evaluate(`${dayBtn('2026-11-06')}.click()`);
+  check('다른 날짜로 옮기면 입력 비움', (await evaluate(value('cn-amt'))) === '');
+
+  // 달력: 미래 날짜
+  await evaluate(`${dayBtn('2026-11-20')}.click()`);
+  check('미래: 날짜 칩과 0원', (await evaluate(`document.querySelector('.cal-side .chip').textContent`)) === '11월 20일 (금)' && (await evaluate(text('day-total'))) === '0원');
+  check('미래: 두 안내 문구', (await evaluate(text('day-list'))) === '이 날은 쓴 돈이 없어요.' && (await evaluate(text('cal-future'))) === '아직 오지 않은 날이에요.');
+  check('미래: 맨 아래 이번 달 남은 돈', (await evaluate(`document.querySelector('.cal-side').lastElementChild.id`)) === 'cal-remain');
+  check('미래: 연필, ×, 추가 상자 없음', await evaluate(`document.querySelector('.cal-side button') === null && document.querySelector('.cal-side .entry') === null`));
+  console.log('shot', await shot('calendar-future'));
+
+  // 달력: 대시보드 반영과 좁은 화면
+  await evaluate(openTab('dashboard'));
+  check('달력 추가가 대시보드 남은 돈에 반영', (await evaluate(text('month-remain'))) === '849,000원', await evaluate(text('month-remain')));
+  check('다른 날 추가는 오늘 쓴 돈에 영향 없음', (await evaluate(text('today-spent'))) === '10,000원');
+  await evaluate(openTab('calendar'));
+  await evaluate(`${dayBtn('2026-11-14')}.click()`);
+  console.log('shot', await shot('calendar-add'));
+  for (const width of [400, 320]) {
+    await size(width, 800);
+    check(`달력 ${width}px 넘침 없음`, !(await evaluate(overflow)));
+    check(`달력 ${width}px 금액이 칸에서 잘리지 않음`, await evaluate(`[...document.querySelectorAll('.day')].every((d) => d.scrollWidth <= d.clientWidth && d.scrollHeight <= d.clientHeight)`));
+    console.log('shot', await shot(`calendar-${width}`));
+  }
+  await size(1200, 800);
+
+  // 정산을 마치면 대시보드로 돌아간다
+  await evaluate(`getToday = () => '2026-12-01'`);
+  await evaluate(`${dayBtn('2026-11-14')}.click()`);
+  check('달력에서 달이 바뀌면 정산 창', !(await evaluate(isHidden('overlay'))));
+  await evaluate(type('save-amount', '849,000'));
+  await evaluate(type('base-amount', '100,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '100,000'));
+  await evaluate(next);
+  check('정산을 마치면 대시보드 표시', (await evaluate(isHidden('overlay'))) && (await evaluate(visible)) === 'dashboard');
+  check('대시보드 탭이 현재 표시', (await evaluate(`document.querySelector('[aria-current="page"]').dataset.view`)) === 'dashboard');
   await setToday(null);
 }
