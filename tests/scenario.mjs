@@ -705,5 +705,31 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('총 금액을 쓴 돈보다 적게 정해도 저장 가능', !(await evaluate(saveDisabled)));
   await evaluate(`document.getElementById('set-save').click()`);
   check('총 금액이 쓴 돈보다 적으면 남은 돈이 음수', (await evaluate(text('month-remain'))) === '-350,000원' && (await evaluate(`document.getElementById('month-remain').classList.contains('neg')`)));
+
+  // 설정: 저장 전 미리보기, 취소, 지난달 라벨
+  await evaluate(openTab('settings'));
+  check('미리보기: 처음에는 현재와 같음', (await evaluate(text('preview-total'))) === '현재 100,000원 → 변경 100,000원' && (await evaluate(text('preview-remain'))) === '-350,000원');
+  check('미리보기: 음수는 빨간색', await evaluate(`document.getElementById('preview-remain').classList.contains('neg')`));
+  check('지난달 수정 불가 라벨', (await evaluate(`document.querySelector('[data-panel="settings"] .lock').textContent`)) === '지난달 기록은 수정할 수 없어요');
+  await evaluate(type('set-total', '1,000,000'));
+  check('미리보기: 입력하면 바로 바뀜', (await evaluate(text('preview-total'))) === '현재 100,000원 → 변경 1,000,000원' && (await evaluate(text('preview-remain'))) === '550,000원');
+  check('미리보기: 양수는 빨간색 해제', !(await evaluate(`document.getElementById('preview-remain').classList.contains('neg')`)));
+  check('미리보기는 저장하지 않음', (await savedMonth()).total === 100000);
+  await evaluate(setAlloc(0, '1,000,000'));
+  console.log('shot', await shot('settings'));
+  await evaluate(type('set-total', 'abc'));
+  check('미리보기: 숫자가 아니면 -', (await evaluate(text('preview-total'))) === '현재 100,000원 → 변경 -' && (await evaluate(text('preview-remain'))) === '-');
+  await evaluate(`document.querySelector('[data-act="set-cancel"]').click()`);
+  check('취소: 대시보드로 돌아감', (await evaluate(visible)) === 'dashboard');
+  check('취소: 저장되지 않음', (await savedMonth()).total === 100000 && (await evaluate(text('month-remain'))) === '-350,000원');
+  await evaluate(openTab('settings'));
+  check('취소 후 다시 열면 저장된 값', (await evaluate(value('set-total'))) === '100,000');
+  await size(400, 800);
+  check('설정 400px 넘침 없음', !(await evaluate(overflow)));
+  console.log('shot', await shot('settings-400'));
+  await size(320, 800);
+  check('설정 320px 넘침 없음', !(await evaluate(overflow)));
+  console.log('shot', await shot('settings-320'));
+  await size(1200, 800);
   await setToday(null);
 }

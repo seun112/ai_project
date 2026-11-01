@@ -205,6 +205,9 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .sec-title.tighter { margin-bottom: 4px; }
 .used { display: block; font-family: 'Gowun Dodum', sans-serif; }
 .hint { margin: 0; }
+.calc.plain { border: none; padding-top: 0; }
+.remain .big.preview { font-size: 44px; line-height: 1.2; }
+.lock.start { align-self: flex-start; }
 .cal-side { word-break: keep-all; }
 .entry .entry-title { font-size: 18px; }.sec-title.tight { margin-bottom: 6px; }
 .dlg-title { display: flex; align-items: center; gap: 12px; }
@@ -1413,6 +1416,22 @@ function currentSettings() {
   return settingsState(visibleCategories(state), state.months[monthKeyOf(getToday())], settings);
 }
 
+// 저장 전에 결과를 미리 보여준다. 총 금액이 숫자가 아니면 계산할 수 없어 -로 둔다.
+function renderSettingsPreview({ total }) {
+  const monthKey = monthKeyOf(getToday());
+  const remain = document.getElementById('preview-remain');
+  const changed = total === null ? '-' : formatWon(total);
+  document.getElementById('preview-total').textContent = `현재 ${formatWon(state.months[monthKey].total)} → 변경 ${changed}`;
+  if (total === null) {
+    remain.textContent = '-';
+    remain.classList.remove('neg');
+    return;
+  }
+  const left = total - monthSpent(state, monthKey);
+  remain.textContent = formatWon(left);
+  remain.classList.toggle('neg', left < 0);
+}
+
 function renderSettingsStatus() {
   const status = currentSettings();
   const left = document.getElementById('set-left');
@@ -1424,6 +1443,7 @@ function renderSettingsStatus() {
   document.querySelectorAll('[data-set-alloc]').forEach((input) => {
     markInvalid(input, !parseOptionalAmount(input.value).ok);
   });
+  renderSettingsPreview(status);
 }
 
 function openSettings() {
@@ -1443,6 +1463,15 @@ function openSettings() {
     <div class="total-box mint"><span class="total-label">아직 나누지 않은 금액</span><strong class="big" id="set-left"></strong></div>
     <p class="sub hint" id="set-hint" role="status"></p>
     <div class="actions"><button class="btn" type="button" data-act="set-cancel">취소</button><button class="btn go" type="button" id="set-save" data-act="set-save">저장</button></div>
+  </div>
+  <div class="col">
+    <div class="remain">
+      <span class="chip">저장하면 이렇게 돼요</span>
+      <div class="calc plain"><span>이번 달 총 금액</span><span class="tnum" id="preview-total"></span></div>
+      <span class="sub">이번 달 남은 돈</span>
+      <strong class="big preview" id="preview-remain"></strong>
+    </div>
+    <span class="lock start">지난달 기록은 수정할 수 없어요</span>
   </div>`;
   renderSettingsStatus();
 }
@@ -1467,6 +1496,7 @@ function handleSettingsClick(event) {
   const button = event.target.closest('[data-act]');
   if (button === null || blockedByNewMonth()) return;
   if (button.dataset.act === 'set-save') saveSettings();
+  if (button.dataset.act === 'set-cancel') showView('dashboard');
 }
 
 // ---- 화면 ----
