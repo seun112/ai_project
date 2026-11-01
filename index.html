@@ -208,6 +208,19 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .x:disabled { background: var(--off); border-color: var(--off-line); cursor: not-allowed; }
 .add-btn { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 18px; font-size: 17px; }
 #settle-error { margin-top: 6px; }
+
+/* 좁은 화면에서 칩이 세로로 찌그러지거나 금액이 상자 밖으로 나가지 않게 한다. */
+.chip { white-space: nowrap; }
+.result .top { flex-wrap: wrap; }
+.result .amt { margin-left: auto; }
+.dlg-title svg { flex: none; }
+.dialog-in { word-break: keep-all; }
+@media (max-width: 560px) {
+  .total-box .big { font-size: 26px; }
+  .opt .more { padding-left: 0; }
+  .opt .unit .field { width: 120px; }
+  .dlg-title h2 { font-size: 24px; }
+}
 </style>
 </head>
 <body>

@@ -177,6 +177,10 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('합이 맞으면 다음 활성', !(await evaluate(nextDisabled)) && (await evaluate(isHidden('settle-error'))));
   check('이월이 총 금액에 반영', (await evaluate(text('calc-carry'))) === '+ 50,000원' && (await evaluate(text('calc-total'))) === '1,050,000원');
   console.log('shot', await shot('settle-leftover'));
+  await size(320, 800);
+  console.log('shot', await shot('settle-leftover-320'));
+  check('남은 돈 320px 넘침 없음', (await evaluate(`document.getElementById('overlay').scrollWidth <= document.getElementById('overlay').clientWidth`)));
+  await size(1200, 800);
   await evaluate(next);
   check('2단계 총 금액에 이월 반영', (await evaluate(text('alloc-total'))) === '1,050,000원');
   await evaluate(alloc(0, '1,050,000'));
@@ -211,10 +215,25 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
     const box = document.querySelector('.dialog').getBoundingClientRect();
     return overlay.scrollWidth <= overlay.clientWidth && box.left >= 0 && box.right <= innerWidth;
   })()`;
+  // 상자 안의 칩, 금액, 입력칸이 부모 밖으로 나가지 않고 칩이 한 줄로 유지되는지 본다.
+  const contentFits = `(() => {
+    const inside = (el, box) => {
+      const a = el.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      return a.left >= b.left - 0.5 && a.right <= b.right + 0.5;
+    };
+    const dialog = document.querySelector('.dialog-in');
+    const parts = [...document.querySelectorAll('#overlay .result .amt, #overlay .result .chip, #overlay .opt .field, #overlay .opt .unit span, #overlay .frow .unit')]
+      .filter((el) => el.offsetParent !== null);
+    const boxed = parts.every((el) => inside(el, el.closest('.result, .opt') ?? dialog));
+    const oneLine = [...document.querySelectorAll('#overlay .chip')].filter((el) => el.offsetParent !== null).every((el) => el.getBoundingClientRect().height < 40);
+    return boxed && oneLine;
+  })()`;
   for (const width of [400, 320]) {
     await size(width, 800);
     check(`정산 창 ${width}px 넘침 없음`, await evaluate(dialogFits));
     check(`화면 ${width}px 넘침 없음`, !(await evaluate(overflow)));
+    check(`정산 창 ${width}px 내용이 상자 안에 있음`, await evaluate(contentFits));
     console.log('shot', await shot(`settle-over-${width}`));
   }
   await size(1200, 800);
