@@ -347,6 +347,38 @@ test('지출 추가와 삭제', { skip: !has('addExpense') }, () => {
   assert.ok(d.left.every((e) => typeof e.id === 'string' && e.id));
 });
 
+test('monthSummary는 그 달 지출만 합친다', { skip: !has('monthSummary') }, () => {
+  const data = q({ expenses: [
+    { date: '2026-10-31', categoryId: 'a', amount: 999 },
+    { date: '2026-11-01', categoryId: 'a', amount: 100 },
+    { date: '2026-11-30', categoryId: 'a', amount: 200 },
+    { date: '2026-11-14', categoryId: 'b', amount: 50 },
+    { date: '2026-12-01', categoryId: 'b', amount: 999 },
+  ] });
+  assert.deepEqual(call(`monthSummary(${data}, '2026-11')`), { spent: 350, byCategory: { a: 300, b: 50 } });
+  assert.deepEqual(call(`monthSummary(${data}, '2027-01')`), { spent: 0, byCategory: {} });
+});
+
+test('PRD 예시: 분류 초과분은 총 잔액에서 감액된다', { skip: !has('monthSummary') }, () => {
+  const data = q({ expenses: [
+    { date: '2026-11-01', categoryId: 'food', amount: 450000 },
+    { date: '2026-11-02', categoryId: 'cloth', amount: 100000 },
+  ] });
+  const { spent, byCategory } = call(`monthSummary(${data}, '2026-11')`);
+  assert.equal(1000000 - spent, 450000, '총 잔액 45만');
+  assert.equal(400000 - byCategory.food, -50000, '식비 잔액 -5만');
+  assert.equal(600000 - byCategory.cloth, 500000, '의류 잔액 +50만');
+});
+
+test('usedPercent', { skip: !has('usedPercent') }, () => {
+  assert.equal(call('usedPercent(0, 1000)'), 0);
+  assert.equal(call('usedPercent(250, 1000)'), 25);
+  assert.equal(call('usedPercent(1000, 1000)'), 100);
+  assert.equal(call('usedPercent(5000, 1000)'), 100, '넘어도 100%');
+  assert.equal(call('usedPercent(0, 0)'), 0, '배분 0원, 지출 없음');
+  assert.equal(call('usedPercent(10, 0)'), 100, '배분 0원인데 지출 있음');
+});
+
 test('분류 표시', { skip: !has('categoryName') }, () => {
   const data = q({ categories: [{ id: 'a', name: '식비', hidden: false }, { id: 'b', name: '의류', hidden: true }] });
   assert.deepEqual(call(`visibleCategories(${data}).map((c) => c.id)`), ['a']);

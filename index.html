@@ -192,11 +192,13 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 
 /* 목업의 인라인 스타일을 옮긴 것 */
 .panel { flex: 1 1 100%; min-width: 0; }
-.panel.cols { display: flex; flex-wrap: wrap; gap: 32px; }
+.panel.cols { display: flex; flex-wrap: wrap; gap: 32px; word-break: keep-all; }
 .today-total { font-size: 32px; line-height: 1.3; }
 .amt-wrap { flex: 1 1 130px; display: flex; align-items: center; gap: 6px; }
 .memo-wrap { flex: 2 1 160px; }
 .field.full { width: 100%; }
+.piggy-amt { font-size: 24px; }
+.sec-title.tight { margin-bottom: 6px; }
 .dlg-title { display: flex; align-items: center; gap: 12px; }
 .dlg-title h2 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 30px; line-height: 1.25; }
 .step { display: flex; flex-direction: column; gap: 16px; }
@@ -674,6 +676,24 @@ function daySpent(data, dateKey) {
     .reduce((sum, expense) => sum + expense.amount, 0);
 }
 
+// 분류별 지출과 전체 지출을 합친다. 그 달 날짜의 지출만 더한다.
+function monthSummary(data, monthKey) {
+  const byCategory = {};
+  let spent = 0;
+  for (const { date, categoryId, amount } of data.expenses) {
+    if (monthKeyOf(date) !== monthKey) continue;
+    byCategory[categoryId] = (byCategory[categoryId] ?? 0) + amount;
+    spent += amount;
+  }
+  return { spent, byCategory };
+}
+
+// 막대에 쓸 사용 비율. 100%를 넘어도 막대는 100%까지만 채운다.
+function usedPercent(used, budget) {
+  if (budget <= 0) return used > 0 ? 100 : 0;
+  return Math.min(100, Math.round((used / budget) * 100));
+}
+
 // ---- 정산 창 ----
 
 // 입력 중인 값은 저장하지 않는다. 끝나기 전에 새로고침하면 창이 처음부터 다시 뜬다.
@@ -937,10 +957,40 @@ function todayRows(today) {
   return rows || '<li class="empty">오늘 쓴 돈이 아직 없어요.</li>';
 }
 
+function categoryRow({ id, name }, allocations, byCategory) {
+  const budget = allocations[id] ?? 0;
+  const used = byCategory[id] ?? 0;
+  const left = budget - used;
+  const over = left < 0;
+  return `<div class="cat-row">
+    <div class="cat-top"><span class="cat-name">${escapeHtml(name)}${over ? ' <span class="over-pill">초과</span>' : ''}</span><strong class="tnum${over ? ' neg-text' : ''}">${formatWon(left)}</strong></div>
+    <div class="bar${over ? ' over' : ''}"><i style="width:${usedPercent(used, budget)}%"></i></div>
+    <span class="sub">배분 ${formatWon(budget)} · 사용 ${formatWon(used)}</span>
+  </div>`;
+}
+
+function monthColumn(monthKey, categories) {
+  const { total, allocations } = state.months[monthKey];
+  const { spent, byCategory } = monthSummary(state, monthKey);
+  const remain = total - spent;
+  const percent = usedPercent(spent, total);
+  return `<div class="col">
+    <div class="remain">
+      <span class="chip">이번 달 남은 돈</span>
+      <strong class="big${remain < 0 ? ' neg' : ''}" id="month-remain">${formatWon(remain)}</strong>
+      <div class="bar lg${remain < 0 ? ' over' : ''}"><i style="width:${percent}%"></i></div>
+      <div class="meta"><span>총 ${formatWon(total)} 중 ${formatWon(spent)} 사용</span><span>${percent}% 썼어요</span></div>
+    </div>
+    <div class="piggy-row"><span class="chip">저금통 잔액</span><strong class="big piggy-amt" id="piggy-balance">${formatWon(state.piggy.balance)}</strong></div>
+    <div><p class="sec-title tight">분류별 남은 돈</p>${categories.map((category) => categoryRow(category, allocations, byCategory)).join('')}</div>
+  </div>`;
+}
+
 // 다시 그려도 입력 중인 금액과 메모는 남긴다.
 function renderDashboard() {
   const today = getToday();
-  if (needsSettlement(state, monthKeyOf(today))) return;
+  const monthKey = monthKeyOf(today);
+  if (needsSettlement(state, monthKey)) return;
   const categories = visibleCategories(state);
   if (!categories.some(({ id }) => id === dashboard.categoryId)) dashboard.categoryId = categories[0]?.id ?? '';
   const amount = document.getElementById('in-amt')?.value ?? '';
@@ -959,7 +1009,7 @@ function renderDashboard() {
       <p class="err" id="in-err" role="alert"${dashboard.error ? '' : ' hidden'}>${escapeHtml(dashboard.error)}</p>
     </div>
     <ul class="list" aria-label="오늘 쓴 내역">${todayRows(today)}</ul>
-  </div>`;
+  </div>${monthColumn(monthKey, categories)}`;
 }
 
 function submitExpense() {

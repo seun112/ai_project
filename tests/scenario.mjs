@@ -425,6 +425,37 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('새로고침해도 지출 유지', (await evaluate(text('today-spent'))) === '4,500원');
   await enterExpense('12345', '<b>메모</b>');
   check('메모의 태그는 글자로 표시', await evaluate(`document.querySelector('[data-panel="dashboard"] .line b') === null`));
-  console.log('shot', await shot('dashboard-left'));
+
+  // 대시보드: 이번 달 남은 돈, 저금통, 분류별 남은 돈
+  const meta = `document.querySelector('.remain .meta').textContent`;
+  const catRow = (i) => `document.querySelectorAll('.cat-row')[${i}].textContent.replace(/\\s+/g, ' ').trim()`;
+  const barWidth = (selector) => `document.querySelector('${selector} .bar > i').style.width`;
+  check('남은 돈 표시', (await evaluate(text('month-remain'))) === '983,155원', await evaluate(text('month-remain')));
+  check('사용 비율 표시', (await evaluate(meta)).replace(/\s+/g, ' ').includes('총 1,000,000원 중 16,845원 사용') && (await evaluate(meta)).includes('2% 썼어요'), await evaluate(meta));
+  check('저금통 잔액 표시, 버튼 없음', (await evaluate(text('piggy-balance'))) === '0원' && (await evaluate(`document.querySelector('.piggy-row button') === null`)));
+  check('분류별 줄은 표시 분류 수만큼', (await evaluate(`document.querySelectorAll('.cat-row').length`)) === 5);
+  check('분류 남은 금액과 배분·사용', (await evaluate(catRow(0))) === '식비387,655원 배분 400,000원 · 사용 12,345원', await evaluate(catRow(0)));
+  check('분류 막대 비율', (await evaluate(barWidth('.cat-row'))) === '3%', await evaluate(barWidth('.cat-row')));
+  console.log('shot', await shot('dashboard'));
+
+  await evaluate(`document.querySelectorAll('[data-act="pick-category"]')[0].click()`);
+  await enterExpense('500,000', '큰 지출');
+  check('분류 초과: -와 초과 라벨', (await evaluate(catRow(0))) === '식비 초과-112,345원 배분 400,000원 · 사용 512,345원', await evaluate(catRow(0)));
+  check('분류 초과: 빨간색과 막대', await evaluate(`document.querySelector('.cat-row strong').classList.contains('neg-text') && document.querySelector('.cat-row .bar').classList.contains('over')`));
+  check('분류 초과: 막대는 100%까지', (await evaluate(barWidth('.cat-row'))) === '100%');
+  check('분류 초과분만큼 남은 돈 감소', (await evaluate(text('month-remain'))) === '483,155원');
+  check('초과하지 않은 분류는 그대로', !(await evaluate(catRow(1))).includes('초과'));
+  await evaluate(`document.querySelectorAll('[data-act="pick-category"]')[1].click()`);
+  await enterExpense('600,000');
+  check('총액 초과: -와 빨간색', (await evaluate(text('month-remain'))) === '-116,845원' && (await evaluate(`document.getElementById('month-remain').classList.contains('neg')`)));
+  check('총액 초과: 막대 빨간색, 100%', (await evaluate(`document.querySelector('.remain .bar').classList.contains('over')`)) && (await evaluate(barWidth('.remain'))) === '100%' && (await evaluate(meta)).includes('100% 썼어요'));
+  console.log('shot', await shot('dashboard-over'));
+  await size(400, 800);
+  check('대시보드 400px 넘침 없음', !(await evaluate(overflow)));
+  console.log('shot', await shot('dashboard-400'));
+  await size(1200, 800);
+  await evaluate(`(() => { const d = JSON.parse(localStorage.getItem('living-budget')); d.piggy.balance = 150000; localStorage.setItem('living-budget', JSON.stringify(d)); })()`);
+  await reload();
+  check('저금통 잔액은 저장된 값', (await evaluate(text('piggy-balance'))) === '150,000원');
   await setToday(null);
 }
