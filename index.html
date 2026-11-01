@@ -254,6 +254,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
         </div>
 
         <div class="step" data-step="1">
+          <p class="notice" id="first-notice" hidden>처음 쓰는 달이라 지난달 결과가 없어요. 이번 달에 쓸 돈만 정하면 돼요.</p>
           <div class="result" id="left-result" hidden><div class="top"><span class="chip" id="left-label"></span><strong class="amt" id="left-amount"></strong></div></div>
           <div class="block" id="left-choice" hidden>
             <p class="sec-title" id="left-title"></p>
@@ -657,6 +658,7 @@ function renderLastMonth() {
   const { mode, lastMonth, amount, piggyBalance } = settle.context;
   const leftover = mode === 'leftover';
   const over = mode === 'over';
+  document.getElementById('first-notice').hidden = mode !== 'first';
   document.getElementById('left-result').hidden = !leftover;
   document.getElementById('left-choice').hidden = !leftover;
   document.getElementById('over-result').hidden = !over;

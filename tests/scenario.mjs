@@ -33,6 +33,8 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('1 / 2 단계 표시', (await evaluate(text('settle-step'))) === '1 / 2 단계');
   check('이번 달 첫 정산 표시', /^\d{1,2}월 첫 정산$/.test(await evaluate(text('settle-label'))));
   check('1단계에 이전 버튼 없음', await evaluate(isHidden('settle-back')));
+  check('처음 쓰는 달: 안내 표시', (await evaluate(text('first-notice'))) === '처음 쓰는 달이라 지난달 결과가 없어요. 이번 달에 쓸 돈만 정하면 돼요.' && !(await evaluate(isHidden('first-notice'))));
+  check('처음 쓰는 달: 지난달 처리 없음', (await evaluate(isHidden('left-result'))) && (await evaluate(isHidden('over-result'))));
   console.log('shot', await shot('settle-first'));
 
   // 총 금액
@@ -219,6 +221,18 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   const overMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
   check('차감 저장', overMonth.baseAmount === 1000000 && overMonth.deduction === 55000 && overMonth.total === 945000);
+
+  // 지난달이 0원으로 딱 맞은 경우
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(seedLastMonth(1000000));
+  await reload();
+  check('0원: 처음 쓰는 달 문구 없음', await evaluate(isHidden('first-notice')));
+  check('0원: 지난달 처리 없음', (await evaluate(isHidden('left-result'))) && (await evaluate(isHidden('left-choice'))) && (await evaluate(isHidden('over-result'))) && (await evaluate(isHidden('over-choice'))));
+  check('0원: 제목 없음', await evaluate(isHidden('settle-title')));
+  await evaluate(type('base-amount', '1,000,000'));
+  check('0원: 총 금액만 정하고 다음 활성', !(await evaluate(nextDisabled)) && (await evaluate(text('calc-total'))) === '1,000,000원');
+  console.log('shot', await shot('settle-even'));
 
   // 탭을 열어둔 채 달이 바뀐 경우
   await size(1200, 800);
