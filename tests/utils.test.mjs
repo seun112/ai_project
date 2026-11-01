@@ -56,11 +56,23 @@ test('parseOptionalAmount는 빈칸을 0원으로 본다', () => {
 test('allocationSummary', { skip: !has('allocationSummary') }, () => {
   const cats = q([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
   const sum = (texts, total) => call(`allocationSummary(${cats}, ${q(texts)}, ${total})`);
-  assert.deepEqual(sum({}, 1000), { sum: 0, bad: false, left: 1000 });
-  assert.deepEqual(sum({ a: '400', b: '', c: '600' }, 1000), { sum: 1000, bad: false, left: 0 });
-  assert.deepEqual(sum({ a: '1,100' }, 1000), { sum: 1100, bad: false, left: -100 });
-  assert.deepEqual(sum({ a: '400', b: '1.5' }, 1000), { sum: 400, bad: true, left: 600 });
-  assert.deepEqual(sum({ a: '100', z: '900' }, 1000), { sum: 100, bad: false, left: 900 }, '목록에 없는 분류는 더하지 않음');
+  assert.deepEqual(sum({}, 1000), { sum: 0, bad: false, left: 1000, ok: false });
+  assert.deepEqual(sum({ a: '400', b: '', c: '600' }, 1000), { sum: 1000, bad: false, left: 0, ok: true });
+  assert.deepEqual(sum({ a: '1,100' }, 1000), { sum: 1100, bad: false, left: -100, ok: false });
+  assert.deepEqual(sum({ a: '400', b: '1.5' }, 1000), { sum: 400, bad: true, left: 600, ok: false });
+  assert.deepEqual(sum({ a: '1000', b: '1.5' }, 1000), { sum: 1000, bad: true, left: 0, ok: false }, '합이 맞아도 잘못된 칸이 있으면 저장 불가');
+  assert.deepEqual(sum({ a: '100', z: '900' }, 1000), { sum: 100, bad: false, left: 900, ok: false }, '목록에 없는 분류는 더하지 않음');
+});
+
+test('applySettlement', { skip: !has('applySettlement') }, () => {
+  const month = { baseAmount: 900, carryIn: 200, deduction: 100, total: 1000, allocations: { a: 1000 } };
+  const data = call(`(() => {
+    const d = { months: { '2026-10': { total: 1, settled: true } } };
+    applySettlement(d, '2026-11', ${q(month)});
+    return d;
+  })()`);
+  assert.deepEqual(data.months['2026-11'], { ...month, settled: true });
+  assert.deepEqual(data.months['2026-10'], { total: 1, settled: true }, '다른 달은 그대로');
 });
 
 test('formatWon', () => {

@@ -154,4 +154,37 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`getToday = () => '2026-12-01'; document.dispatchEvent(new Event('visibilitychange'));`);
   check('탭 복귀 시 달이 바뀌었으면 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('app'))));
   await setToday(null);
+
+  // 합계 검증과 저장
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  const nextBtn = `document.getElementById('wizard-next')`;
+  await evaluate(type('base-amount', '1,000,000'));
+  check('총 금액 단계 버튼은 다음', (await evaluate(`${nextBtn}.textContent`)) === '다음');
+  await evaluate(next);
+  check('배분 단계 버튼은 저장하고 시작', (await evaluate(`${nextBtn}.textContent`)) === '저장하고 시작');
+  check('아직 나누지 않았으면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  await evaluate(`document.getElementById('wizard-back').click()`);
+  check('이전으로 돌아가면 다음 버튼 활성', (await evaluate(`${nextBtn}.textContent`)) === '다음' && !(await evaluate(`${nextBtn}.disabled`)));
+  await evaluate(next);
+  await evaluate(alloc(0, '600,000'));
+  check('합계가 모자라면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  await evaluate(alloc(1, '500,000'));
+  check('합계가 넘치면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  await evaluate(alloc(1, '400,000'));
+  await evaluate(alloc(2, 'abc'));
+  check('합이 맞아도 잘못된 칸이 있으면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  await evaluate(`document.getElementById('wizard-form').requestSubmit()`);
+  check('저장 차단: 제출해도 기록되지 않음', Object.keys(JSON.parse(await evaluate(raw)).months).length === 0);
+  await evaluate(alloc(2, ''));
+  check('합계가 맞으면 저장 활성', !(await evaluate(`${nextBtn}.disabled`)));
+  await evaluate(`document.querySelector('[data-alloc]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))`);
+  check('입력칸 Enter로는 저장되지 않음', !(await evaluate(isHidden('wizard'))));
+  await evaluate(next);
+  check('저장 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
+  const saved = Object.values(JSON.parse(await evaluate(raw)).months);
+  check('정산 기록 저장', saved.length === 1 && saved[0].settled === true && saved[0].total === 1000000 && saved[0].baseAmount === 1000000);
+  check('배분 저장, 빈칸은 0원', Object.values(saved[0].allocations).join() === '600000,400000,0,0,0', Object.values(saved[0].allocations).join());
+  await reload();
+  check('새로고침해도 정산 창이 다시 뜨지 않음', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
 }

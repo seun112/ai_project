@@ -233,6 +233,7 @@
     background: var(--surface);
   }
   .button-solid { background: var(--ink); color: var(--surface); }
+  .button:disabled { border-color: var(--line); background: var(--line); color: var(--ink-soft); cursor: not-allowed; }
   .button-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
   @media (max-width: 40rem) {
@@ -553,6 +554,11 @@ function wizardSteps(data, monthKey) {
   return lastSettledMonth(data, monthKey) === null ? steps : ['result', ...steps];
 }
 
+// 정산 결과는 이 함수에서 한 번에 기록한다.
+function applySettlement(data, monthKey, { baseAmount, carryIn, deduction, total, allocations }) {
+  data.months[monthKey] = { baseAmount, carryIn, deduction, total, allocations, settled: true };
+}
+
 // 분류별 입력값을 더해 아직 나누지 않은 금액을 계산한다. 잘못된 칸은 합계에서 뺀다.
 function allocationSummary(categories, texts, total) {
   let sum = 0;
@@ -562,7 +568,8 @@ function allocationSummary(categories, texts, total) {
     if (parsed.ok) sum += parsed.value;
     else bad = true;
   }
-  return { sum, bad, left: total - sum };
+  const left = total - sum;
+  return { sum, bad, left, ok: !bad && left === 0 };
 }
 
 // ---- 정산 마법사 ----
@@ -629,7 +636,7 @@ function allocationRow({ id, name }) {
 
 // 입력칸을 다시 그리지 않으므로 입력 중에 불러도 포커스가 유지된다.
 function renderAllocateSummary() {
-  const { sum, bad, left } = allocationSummary(wizard.categories, wizard.allocations, wizardTotal());
+  const { sum, bad, left, ok } = allocationSummary(wizard.categories, wizard.allocations, wizardTotal());
   const leftEl = document.getElementById('alloc-left');
   const hint = document.getElementById('alloc-hint');
   document.getElementById('alloc-sum').textContent = formatWon(sum);
@@ -637,6 +644,7 @@ function renderAllocateSummary() {
   leftEl.classList.toggle('over', left < 0);
   hint.textContent = bad ? '금액은 원 단위 숫자만 입력할 수 있어요.' : '';
   hint.hidden = !bad;
+  document.getElementById('wizard-next').disabled = !ok;
   document.querySelectorAll('[data-alloc]').forEach((input) => {
     const invalid = !parseOptionalAmount(input.value).ok;
     if (invalid) input.setAttribute('aria-invalid', 'true');
@@ -657,6 +665,22 @@ function handleAllocationInput(event) {
   renderAllocateSummary();
 }
 
+function saveWizard() {
+  const { monthKey, categories, allocations, carryIn, deduction } = wizard;
+  const total = wizardTotal();
+  if (!allocationSummary(categories, allocations, total).ok) return;
+  applySettlement(state, monthKey, {
+    baseAmount: wizardBaseAmount(),
+    carryIn,
+    deduction,
+    total,
+    allocations: Object.fromEntries(categories.map(({ id }) => [id, parseOptionalAmount(allocations[id]).value])),
+  });
+  wizard = null;
+  saveState();
+  enterApp();
+}
+
 function renderWizardStep() {
   const { monthKey, steps, index } = wizard;
   const step = steps[index];
@@ -665,6 +689,9 @@ function renderWizardStep() {
     panel.hidden = panel.dataset.step !== step;
   });
   document.getElementById('wizard-back').hidden = index === 0;
+  const next = document.getElementById('wizard-next');
+  next.textContent = step === 'allocate' ? '저장하고 시작' : '다음';
+  next.disabled = false;
   if (step === 'total') document.getElementById('base-amount').focus();
   if (step === 'allocate') {
     renderAllocateStep();
@@ -697,6 +724,10 @@ function moveWizard(delta) {
 
 function handleWizardSubmit(event) {
   event.preventDefault();
+  if (wizard.steps[wizard.index] === 'allocate') {
+    saveWizard();
+    return;
+  }
   if (wizard.steps[wizard.index] === 'total') {
     const message = totalStepError();
     const input = document.getElementById('base-amount');
@@ -757,6 +788,10 @@ function init() {
   document.getElementById('wizard-form').addEventListener('submit', handleWizardSubmit);
   document.getElementById('wizard-back').addEventListener('click', () => moveWizard(-1));
   document.getElementById('alloc-rows').addEventListener('input', handleAllocationInput);
+  // 금액을 넣다가 Enter로 바로 저장되지 않게 한다. 저장은 버튼으로만 한다.
+  document.getElementById('alloc-rows').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') event.preventDefault();
+  });
   document.getElementById('base-amount').addEventListener('input', (event) => {
     showFieldError(event.target, document.getElementById('base-error'), '');
     renderTotalStep();
