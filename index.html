@@ -144,6 +144,46 @@
   .sum strong { font-size: 2rem; line-height: 1.3; }
   .over { color: var(--seal); }
 
+  /* 정산 2단계. 구조와 문구는 목업을 따르고, 색과 글꼴은 T3에서 바꾼다. */
+  .result {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+  }
+  .result .amt { font-size: 1.5rem; }
+  .frow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    min-height: 3.5rem;
+    border-bottom: 1px dotted var(--line);
+  }
+  .frow label { font-weight: 700; overflow-wrap: anywhere; }
+  .unit { display: flex; align-items: center; gap: 0.5rem; }
+  .field {
+    width: 9rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--ink-soft);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+  }
+  .field.right { text-align: right; font-variant-numeric: tabular-nums; }
+  .field[aria-invalid="true"] { border: 2px solid var(--seal); }
+  .calc {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+    color: var(--ink-soft);
+  }
+
   .field-label { display: block; margin-bottom: 0.25rem; font-weight: 700; }
 
   .amount-input {
@@ -258,7 +298,12 @@
       </div>
 
       <div data-step="allocate" hidden>
-        <h1>분류별 배분</h1>
+        <h1>분류별로 나눠 주세요</h1>
+        <div class="result"><span>이번 달 총 금액</span><strong class="amt" id="alloc-total"></strong></div>
+        <div id="alloc-rows"></div>
+        <div class="calc"><span>배분 합계</span><span id="alloc-sum"></span></div>
+        <p class="sum"><span>아직 나누지 않은 금액</span><strong id="alloc-left"></strong></p>
+        <p class="field-error over" id="alloc-hint" role="status" hidden></p>
       </div>
 
       <div class="wizard-actions">
@@ -326,6 +371,11 @@ function parseAmount(text, { min = 0 } = {}) {
   if (!Number.isSafeInteger(value)) return { ok: false, error: '금액이 너무 큽니다.' };
   if (value < min) return { ok: false, error: `${formatWon(min)} 이상 입력하세요.` };
   return { ok: true, value };
+}
+
+// 빈칸을 0원으로 보는 입력칸(분류 배분)에서 쓴다.
+function parseOptionalAmount(text) {
+  return String(text ?? '').trim() === '' ? { ok: true, value: 0 } : parseAmount(text);
 }
 
 function formatWon(amount) {
@@ -503,10 +553,27 @@ function wizardSteps(data, monthKey) {
   return lastSettledMonth(data, monthKey) === null ? steps : ['result', ...steps];
 }
 
+// 분류별 입력값을 더해 아직 나누지 않은 금액을 계산한다. 잘못된 칸은 합계에서 뺀다.
+function allocationSummary(categories, texts, total) {
+  let sum = 0;
+  let bad = false;
+  for (const { id } of categories) {
+    const parsed = parseOptionalAmount(texts[id]);
+    if (parsed.ok) sum += parsed.value;
+    else bad = true;
+  }
+  return { sum, bad, left: total - sum };
+}
+
 // ---- 정산 마법사 ----
 
 // 입력 중인 값은 저장하지 않는다. 끝나기 전에 새로고침하면 마법사가 다시 시작된다.
 let wizard = null;
+
+function escapeHtml(text) {
+  const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(text).replace(/[&<>"']/g, (char) => entities[char]);
+}
 
 function renderResultStep() {
   const lastMonth = lastSettledMonth(state, wizard.monthKey);
@@ -550,6 +617,46 @@ function totalStepError() {
   return wizardTotal() < 1 ? '총 금액은 1원 이상이어야 합니다.' : '';
 }
 
+function allocationRow({ id, name }) {
+  const safeId = escapeHtml(id);
+  return `<div class="frow">
+    <label for="alloc-${safeId}">${escapeHtml(name)}</label>
+    <div class="unit">
+      <input class="field right" id="alloc-${safeId}" data-alloc="${safeId}" inputmode="numeric" autocomplete="off" placeholder="0" value="${escapeHtml(wizard.allocations[id] ?? '')}"><span>원</span>
+    </div>
+  </div>`;
+}
+
+// 입력칸을 다시 그리지 않으므로 입력 중에 불러도 포커스가 유지된다.
+function renderAllocateSummary() {
+  const { sum, bad, left } = allocationSummary(wizard.categories, wizard.allocations, wizardTotal());
+  const leftEl = document.getElementById('alloc-left');
+  const hint = document.getElementById('alloc-hint');
+  document.getElementById('alloc-sum').textContent = formatWon(sum);
+  leftEl.textContent = formatWon(left);
+  leftEl.classList.toggle('over', left < 0);
+  hint.textContent = bad ? '금액은 원 단위 숫자만 입력할 수 있어요.' : '';
+  hint.hidden = !bad;
+  document.querySelectorAll('[data-alloc]').forEach((input) => {
+    const invalid = !parseOptionalAmount(input.value).ok;
+    if (invalid) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
+  });
+}
+
+function renderAllocateStep() {
+  document.getElementById('alloc-total').textContent = formatWon(wizardTotal());
+  document.getElementById('alloc-rows').innerHTML = wizard.categories.map(allocationRow).join('');
+  renderAllocateSummary();
+}
+
+function handleAllocationInput(event) {
+  const id = event.target.dataset.alloc;
+  if (id === undefined) return;
+  wizard.allocations[id] = event.target.value;
+  renderAllocateSummary();
+}
+
 function renderWizardStep() {
   const { monthKey, steps, index } = wizard;
   const step = steps[index];
@@ -559,11 +666,23 @@ function renderWizardStep() {
   });
   document.getElementById('wizard-back').hidden = index === 0;
   if (step === 'total') document.getElementById('base-amount').focus();
+  if (step === 'allocate') {
+    renderAllocateStep();
+    document.querySelector('[data-alloc]')?.focus();
+  }
 }
 
 function startWizard(monthKey) {
-  // 이월과 차감은 T6의 지난달 처리에서 채운다.
-  wizard = { monthKey, steps: wizardSteps(state, monthKey), index: 0, carryIn: 0, deduction: 0 };
+  // 이월과 차감은 T3의 1단계 화면에서 채운다.
+  wizard = {
+    monthKey,
+    steps: wizardSteps(state, monthKey),
+    index: 0,
+    carryIn: 0,
+    deduction: 0,
+    categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
+    allocations: {},
+  };
   document.getElementById('wizard-form').reset();
   showFieldError(document.getElementById('base-amount'), document.getElementById('base-error'), '');
   renderResultStep();
@@ -637,6 +756,7 @@ function init() {
   document.getElementById('reset-run').addEventListener('click', resetData);
   document.getElementById('wizard-form').addEventListener('submit', handleWizardSubmit);
   document.getElementById('wizard-back').addEventListener('click', () => moveWizard(-1));
+  document.getElementById('alloc-rows').addEventListener('input', handleAllocationInput);
   document.getElementById('base-amount').addEventListener('input', (event) => {
     showFieldError(event.target, document.getElementById('base-error'), '');
     renderTotalStep();

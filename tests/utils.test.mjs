@@ -45,6 +45,24 @@ test('parseAmount 최소값', () => {
   assert.equal(call(`parseAmount('1', { min: 1 })`).ok, true);
 });
 
+test('parseOptionalAmount는 빈칸을 0원으로 본다', () => {
+  for (const input of ['', '   ', null]) {
+    assert.deepEqual(call(`parseOptionalAmount(${q(input)})`), { ok: true, value: 0 }, String(input));
+  }
+  assert.deepEqual(call(`parseOptionalAmount('1,000')`), { ok: true, value: 1000 });
+  for (const input of ['1.5', '-1', 'abc']) assert.equal(call(`parseOptionalAmount(${q(input)})`).ok, false, input);
+});
+
+test('allocationSummary', { skip: !has('allocationSummary') }, () => {
+  const cats = q([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+  const sum = (texts, total) => call(`allocationSummary(${cats}, ${q(texts)}, ${total})`);
+  assert.deepEqual(sum({}, 1000), { sum: 0, bad: false, left: 1000 });
+  assert.deepEqual(sum({ a: '400', b: '', c: '600' }, 1000), { sum: 1000, bad: false, left: 0 });
+  assert.deepEqual(sum({ a: '1,100' }, 1000), { sum: 1100, bad: false, left: -100 });
+  assert.deepEqual(sum({ a: '400', b: '1.5' }, 1000), { sum: 400, bad: true, left: 600 });
+  assert.deepEqual(sum({ a: '100', z: '900' }, 1000), { sum: 100, bad: false, left: 900 }, '목록에 없는 분류는 더하지 않음');
+});
+
 test('formatWon', () => {
   assert.equal(call('formatWon(1200000)'), '1,200,000원');
   assert.equal(call('formatWon(0)'), '0원');

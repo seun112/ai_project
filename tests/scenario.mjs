@@ -45,6 +45,28 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`document.getElementById('wizard-back').click()`);
   check('돌아와도 입력값 유지', (await evaluate(`document.getElementById('base-amount').value`)) === '1,000,000');
 
+  // 분류별 배분 단계
+  const alloc = (i, value) => `(() => { const el = document.querySelectorAll('[data-alloc]')[${i}]; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  const allocAttr = (i, name) => `document.querySelectorAll('[data-alloc]')[${i}].getAttribute('${name}')`;
+  await evaluate(next);
+  check('배분: 분류 5개 입력칸', (await evaluate(`document.querySelectorAll('[data-alloc]').length`)) === 5);
+  check('배분: 첫 칸에 포커스', (await evaluate(`document.activeElement === document.querySelector('[data-alloc]')`)));
+  check('배분: 총 금액 표시', (await evaluate(text('alloc-total'))) === '1,000,000원');
+  check('배분: 처음에는 전액 미배분', (await evaluate(text('alloc-sum'))) === '0원' && (await evaluate(text('alloc-left'))) === '1,000,000원');
+  await evaluate(alloc(0, '400,000'));
+  check('입력하면 합계와 미배분이 바로 바뀜', (await evaluate(text('alloc-sum'))) === '400,000원' && (await evaluate(text('alloc-left'))) === '600,000원');
+  await evaluate(alloc(1, '700000'));
+  check('초과 배분은 -와 빨간색', (await evaluate(text('alloc-left'))) === '-100,000원' && (await evaluate(`document.getElementById('alloc-left').classList.contains('over')`)));
+  console.log('shot', await shot('allocate-over'));
+  await evaluate(alloc(1, '1.5'));
+  check('잘못된 금액: 칸 표시와 안내', (await evaluate(allocAttr(1, 'aria-invalid'))) === 'true' && !(await evaluate(isHidden('alloc-hint'))), await evaluate(text('alloc-hint')));
+  await evaluate(alloc(1, ''));
+  check('빈칸은 0원: 오류 없음', (await evaluate(allocAttr(1, 'aria-invalid'))) === null && (await evaluate(isHidden('alloc-hint'))) && (await evaluate(text('alloc-sum'))) === '400,000원');
+  await evaluate(`document.getElementById('wizard-back').click()`);
+  await evaluate(next);
+  check('이전으로 갔다 와도 배분 입력 유지', (await evaluate(`document.querySelectorAll('[data-alloc]')[0].value`)) === '400,000');
+  await evaluate(`document.getElementById('wizard-back').click()`);
+
   await evaluate(seedSettled);
   await reload();
   check('정산 완료 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
