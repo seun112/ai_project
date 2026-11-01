@@ -652,5 +652,58 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   check('정산을 마치면 대시보드 표시', (await evaluate(isHidden('overlay'))) && (await evaluate(visible)) === 'dashboard');
   check('대시보드 탭이 현재 표시', (await evaluate(`document.querySelector('[aria-current="page"]').dataset.view`)) === 'dashboard');
+
+  // 설정: 이번 달 금액 수정
+  await setToday('2026-11-14');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(type('base-amount', '1,000,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '400,000'));
+  await evaluate(alloc(1, '600,000'));
+  await evaluate(next);
+  await evaluate(`(() => {
+    const d = JSON.parse(localStorage.getItem('living-budget'));
+    d.expenses.push({ id: 's1', date: '2026-11-03', categoryId: d.categories[0].id, amount: 450000, memo: '식비' });
+    localStorage.setItem('living-budget', JSON.stringify(d));
+  })()`);
+  await reload();
+  const setAlloc = (i, val) => `(() => { const el = document.querySelectorAll('[data-set-alloc]')[${i}]; el.value = ${JSON.stringify(val)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  const saveDisabled = `document.getElementById('set-save').disabled`;
+  const savedMonth = async () => JSON.parse(await evaluate(raw)).months['2026-11'];
+  await evaluate(openTab('settings'));
+  check('설정: 분류 줄과 현재 금액', (await evaluate(`document.querySelectorAll('[data-set-alloc]').length`)) === 5 && (await evaluate(value('set-total'))) === '1,000,000' && (await evaluate(`document.querySelector('[data-set-alloc]').value`)) === '400,000');
+  check('설정: 분류마다 사용 금액', (await evaluate(`document.querySelector('[data-panel="settings"] .used').textContent`)) === '사용 450,000원');
+  check('설정: 미배분 0원', (await evaluate(text('set-left'))) === '0원');
+  check('바뀐 내용 없으면 저장 비활성과 안내', (await evaluate(saveDisabled)) && (await evaluate(text('set-hint'))) === '바꾼 내용이 없어요.');
+  await evaluate(setAlloc(0, '350,000'));
+  check('모자라면 안내', (await evaluate(saveDisabled)) && (await evaluate(text('set-hint'))) === '50,000원을 더 나눠야 저장할 수 있어요.' && (await evaluate(text('set-left'))) === '50,000원');
+  await evaluate(setAlloc(0, '450,000'));
+  check('넘치면 안내와 빨간색', (await evaluate(saveDisabled)) && (await evaluate(text('set-hint'))) === '총 금액보다 50,000원 많아요. 줄여 주세요.' && (await evaluate(text('set-left'))) === '-50,000원' && (await evaluate(`document.getElementById('set-left').classList.contains('neg-text')`)));
+  await evaluate(setAlloc(0, '1.5'));
+  check('잘못된 배분: 칸 표시와 안내', (await evaluate(saveDisabled)) && (await evaluate(`document.querySelector('[data-set-alloc]').getAttribute('aria-invalid')`)) === 'true' && (await evaluate(text('set-hint'))) === '금액은 원 단위 숫자만 입력할 수 있어요.');
+  await evaluate(setAlloc(0, '350,000'));
+  await evaluate(type('set-total', 'abc'));
+  check('잘못된 총 금액: 칸 표시와 안내', (await evaluate(saveDisabled)) && (await evaluate(`document.getElementById('set-total').getAttribute('aria-invalid')`)) === 'true' && (await evaluate(text('set-hint'))) === '총 금액은 원 단위 숫자만 입력할 수 있어요.');
+  await evaluate(type('set-total', '0'));
+  check('0원: 안내', (await evaluate(saveDisabled)) && (await evaluate(text('set-hint'))) === '총 금액은 1원 이상이어야 해요.');
+  await evaluate(type('set-total', '950,000'));
+  check('합계가 맞으면 저장 활성', !(await evaluate(saveDisabled)) && (await evaluate(text('set-hint'))) === '합계가 딱 맞아요. 저장할 수 있어요.');
+  await evaluate(`document.getElementById('set-save').click()`);
+  const edit1 = await savedMonth();
+  check('저장: 총 금액과 배분 반영', edit1.total === 950000 && Object.values(edit1.allocations).join() === '350000,600000,0,0,0');
+  check('저장: 공식 유지', edit1.baseAmount + edit1.carryIn - edit1.deduction === 950000);
+  check('저장 후 대시보드로 이동', (await evaluate(visible)) === 'dashboard' && (await evaluate(`document.querySelector('[aria-current="page"]').dataset.view`)) === 'dashboard');
+  check('이미 쓴 지출은 그대로', (await expenses()).length === 1);
+  check('이미 쓴 돈보다 적은 분류는 초과 표시', (await evaluate(catRow(0))) === '식비 초과-100,000원 배분 350,000원 · 사용 450,000원', await evaluate(catRow(0)));
+  check('대시보드 남은 돈 반영', (await evaluate(text('month-remain'))) === '500,000원');
+
+  await evaluate(openTab('settings'));
+  await evaluate(type('set-total', '100,000'));
+  await evaluate(setAlloc(0, '100,000'));
+  await evaluate(setAlloc(1, ''));
+  check('총 금액을 쓴 돈보다 적게 정해도 저장 가능', !(await evaluate(saveDisabled)));
+  await evaluate(`document.getElementById('set-save').click()`);
+  check('총 금액이 쓴 돈보다 적으면 남은 돈이 음수', (await evaluate(text('month-remain'))) === '-350,000원' && (await evaluate(`document.getElementById('month-remain').classList.contains('neg')`)));
   await setToday(null);
 }

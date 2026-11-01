@@ -444,6 +444,45 @@ test('formatDay', { skip: !has('formatDay') }, () => {
   assert.equal(call(`formatDay('2026-01-05')`), '1월 5일 (월)');
 });
 
+test('settingsState와 안내 문구', { skip: !has('settingsState') }, () => {
+  const cats = q([{ id: 'a' }, { id: 'b' }]);
+  const month = q({ total: 1000, allocations: { a: 400, b: 600 } });
+  const state = (total, a, b) => call(`settingsState(${cats}, ${month}, ${q({ total, allocations: { a, b } })})`);
+  const hint = (total, a, b) => call(`settingsHint(settingsState(${cats}, ${month}, ${q({ total, allocations: { a, b } })}))`);
+
+  assert.equal(state('1,000', '400', '600').ok, false);
+  assert.equal(hint('1,000', '400', '600'), '바꾼 내용이 없어요.');
+  assert.equal(hint('1000', '300', '600'), '100원을 더 나눠야 저장할 수 있어요.');
+  assert.equal(hint('1000', '500', '600'), '총 금액보다 100원 많아요. 줄여 주세요.');
+  assert.equal(hint('abc', '400', '600'), '총 금액은 원 단위 숫자만 입력할 수 있어요.');
+  assert.equal(hint('', '400', '600'), '총 금액은 원 단위 숫자만 입력할 수 있어요.');
+  assert.equal(hint('0', '0', '0'), '총 금액은 1원 이상이어야 해요.');
+  assert.equal(hint('1000', '1.5', '600'), '금액은 원 단위 숫자만 입력할 수 있어요.');
+  assert.equal(hint('1000', '500', '500'), '합계가 딱 맞아요. 저장할 수 있어요.');
+
+  const moved = state('1000', '500', '500');
+  assert.equal(moved.ok, true, '총 금액은 그대로, 배분만 변경');
+  assert.deepEqual(moved.allocations, { a: 500, b: 500 });
+  assert.equal(state('2000', '1400', '600').ok, true, '총 금액 변경');
+  assert.equal(state('1000', '1000', '').ok, true, '빈칸은 0원');
+  assert.equal(state('1000', '1000', '').allocations.b, 0);
+  assert.equal(state('1', '1', '0').ok, true, '1원이면 저장 가능');
+  assert.equal(state('0', '0', '0').ok, false, '0원은 저장 불가');
+  assert.equal(state('1000', '1000', '0.5').ok, false);
+});
+
+test('applyMonthEdit', { skip: !has('applyMonthEdit') }, () => {
+  const data = q({ months: { '2026-11': { baseAmount: 900, carryIn: 300, deduction: 200, total: 1000, allocations: { a: 1000 }, settled: true } } });
+  const month = call(`(() => { const d = ${data}; applyMonthEdit(d, '2026-11', 800, { a: 500, b: 300 }); return d.months['2026-11']; })()`);
+  assert.equal(month.total, 800);
+  assert.deepEqual(month.allocations, { a: 500, b: 300 });
+  assert.equal(month.carryIn, 300, '이월은 그대로');
+  assert.equal(month.deduction, 200, '차감은 그대로');
+  assert.equal(month.baseAmount, 700);
+  assert.equal(month.baseAmount + month.carryIn - month.deduction, month.total, '공식 유지');
+  assert.equal(month.settled, true);
+});
+
 test('분류 표시', { skip: !has('categoryName') }, () => {
   const data = q({ categories: [{ id: 'a', name: '식비', hidden: false }, { id: 'b', name: '의류', hidden: true }] });
   assert.deepEqual(call(`visibleCategories(${data}).map((c) => c.id)`), ['a']);
