@@ -57,7 +57,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
 
   // 첫 실행 저장과 새로고침 유지
   const first = await evaluate(raw);
-  check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 4);
+  check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 5);
   await reload();
   check('새로고침 후 분류 id 유지', (await evaluate(raw)) === first);
   await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; ${setRaw('')}; localStorage.setItem('living-budget', JSON.stringify(d));`);
@@ -93,7 +93,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`document.getElementById('reset-run').click()`);
   check('초기화 후 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))));
   const after = JSON.parse(await evaluate(raw));
-  check('초기화 후 빈 데이터 저장', after.version === 1 && after.categories.length === 4 && after.piggy.balance === 0);
+  check('초기화 후 빈 데이터 저장', after.version === 1 && after.categories.length === 5 && after.piggy.balance === 0);
   await reload();
   await reload();
   check('초기화 후 새로고침해도 마법사 표시', !(await evaluate(isHidden('wizard'))));

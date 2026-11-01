@@ -99,9 +99,9 @@ test('getToday는 로컬 시간 기준이다', { skip: !has('getToday') }, () =>
 test('createEmptyData', { skip: !has('createEmptyData') }, () => {
   const data = call('createEmptyData()');
   assert.equal(data.version, 1);
-  assert.deepEqual(data.categories.map((c) => c.name), ['식비', '의류', '취미', '기타']);
+  assert.deepEqual(data.categories.map((c) => c.name), ['식비', '의류', '취미', '교통', '기타']);
   assert.ok(data.categories.every((c) => typeof c.id === 'string' && c.id && c.hidden === false));
-  assert.equal(new Set(data.categories.map((c) => c.id)).size, 4);
+  assert.equal(new Set(data.categories.map((c) => c.id)).size, 5);
   assert.deepEqual(data.months, {});
   assert.deepEqual(data.expenses, []);
   assert.deepEqual(data.piggy, { balance: 0, history: [] });
