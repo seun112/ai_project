@@ -250,6 +250,18 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
         </div>
 
         <div class="step" data-step="1">
+          <div class="result" id="left-result" hidden><div class="top"><span class="chip" id="left-label"></span><strong class="amt" id="left-amount"></strong></div></div>
+          <div class="block" id="left-choice" hidden>
+            <p class="sec-title" id="left-title"></p>
+            <div class="frow">
+              <label for="save-amount">저금통에 저축</label>
+              <div class="unit"><input class="field right" id="save-amount" data-field="save" inputmode="numeric" autocomplete="off"><span>원</span></div>
+            </div>
+            <div class="frow">
+              <label for="carry-amount">다음 달로 이월</label>
+              <div class="unit"><input class="field right" id="carry-amount" data-field="carry" inputmode="numeric" autocomplete="off"><span>원</span></div>
+            </div>
+          </div>
           <div class="block">
             <p class="sec-title">이번 달 총 금액</p>
             <div class="frow">
@@ -491,19 +503,42 @@ function computeTotal(baseAmount, carryIn, deduction) {
   return baseAmount + carryIn - deduction;
 }
 
+// 마지막으로 정산된 달의 결과로 1단계 화면 종류를 정한다.
+function settlementContext(data, monthKey) {
+  const lastMonth = lastSettledMonth(data, monthKey);
+  if (lastMonth === null) return { mode: 'first', lastMonth, amount: 0 };
+  const balance = monthBalance(data, lastMonth);
+  if (balance > 0) return { mode: 'leftover', lastMonth, amount: balance };
+  return { mode: 'even', lastMonth, amount: 0 };
+}
+
 // 1단계 입력값으로 총 금액을 계산한다. why는 `다음`을 막는 이유이고 비어 있으면 통과다.
-function calcSettlement({ base: baseText }) {
+function calcSettlement({ mode, amount }, { base: baseText, save: saveText, carry: carryText }) {
   const empty = String(baseText ?? '').trim() === '';
   const parsed = parseAmount(baseText);
   const base = parsed.ok ? parsed.value : null;
-  const carryIn = 0;
+  let carryIn = 0;
+  let piggyIn = 0;
   const deduction = 0;
+  let choiceWhy = '';
+  if (mode === 'leftover') {
+    const save = parseOptionalAmount(saveText);
+    const carry = parseOptionalAmount(carryText);
+    if (!save.ok || !carry.ok) {
+      choiceWhy = 'bad';
+    } else {
+      carryIn = carry.value;
+      piggyIn = save.value;
+      if (save.value + carry.value !== amount) choiceWhy = 'sum';
+    }
+  }
   const total = computeTotal(base ?? 0, carryIn, deduction);
   let why = '';
-  if (empty) why = 'empty';
-  else if (base === null) why = 'base';
+  if (!empty && base === null) why = 'base';
+  else if (choiceWhy !== '') why = choiceWhy;
+  else if (empty) why = 'empty';
   else if (total < 1) why = 'total';
-  return { base, carryIn, deduction, total, why, ok: why === '' };
+  return { base, carryIn, deduction, piggyIn, total, why, ok: why === '' };
 }
 
 // 분류 이름의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
@@ -561,13 +596,33 @@ function escapeHtml(text) {
 }
 
 function currentCalc() {
-  return calcSettlement(settle.inputs);
+  return calcSettlement(settle.context, settle.inputs);
 }
 
 function settleErrorText({ why }) {
   if (why === 'base') return '기본 금액은 원 단위 숫자만 입력할 수 있어요.';
   if (why === 'total') return '이번 달 총 금액은 1원 이상이어야 해요.';
+  if (why === 'bad') return '금액은 원 단위 숫자만 입력할 수 있어요.';
+  if (why === 'sum') return `저축과 이월을 더한 금액이 남은 ${formatWon(settle.context.amount)}과 같아야 해요.`;
   return '';
+}
+
+function markInvalid(input, invalid) {
+  if (invalid) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+}
+
+// 지난달 결과 부분은 정산 창을 열 때 한 번만 채운다.
+function renderLastMonth() {
+  const { mode, lastMonth, amount } = settle.context;
+  const leftover = mode === 'leftover';
+  document.getElementById('left-result').hidden = !leftover;
+  document.getElementById('left-choice').hidden = !leftover;
+  if (leftover) {
+    document.getElementById('left-label').textContent = `${Number(lastMonth.slice(5))}월 남은 돈`;
+    document.getElementById('left-amount').textContent = `+${formatWon(amount)}`;
+    document.getElementById('left-title').textContent = `남은 ${formatWon(amount)}을 어떻게 할까요?`;
+  }
 }
 
 function renderTotal() {
@@ -580,8 +635,9 @@ function renderTotal() {
   document.getElementById('calc-total').textContent = formatWon(calc.total);
   error.textContent = message;
   error.hidden = message === '';
-  if (calc.why === 'base') base.setAttribute('aria-invalid', 'true');
-  else base.removeAttribute('aria-invalid');
+  markInvalid(base, calc.why === 'base');
+  markInvalid(document.getElementById('save-amount'), !parseOptionalAmount(settle.inputs.save).ok);
+  markInvalid(document.getElementById('carry-amount'), !parseOptionalAmount(settle.inputs.carry).ok);
   document.getElementById('settle-next').disabled = !calc.ok;
 }
 
@@ -619,9 +675,7 @@ function renderAllocateSummary() {
   hint.hidden = !bad;
   document.getElementById('settle-next').disabled = !ok;
   document.querySelectorAll('[data-alloc]').forEach((input) => {
-    const invalid = !parseOptionalAmount(input.value).ok;
-    if (invalid) input.setAttribute('aria-invalid', 'true');
-    else input.removeAttribute('aria-invalid');
+    markInvalid(input, !parseOptionalAmount(input.value).ok);
   });
 }
 
@@ -712,21 +766,23 @@ function renderSettle() {
   document.getElementById('settle-next').textContent = step === 2 ? '저장하고 시작' : '다음';
   if (step === 1) renderTotal();
   else renderAllocateStep();
-  const panel = document.querySelector(`[data-step="${step}"]`);
-  panel.querySelector('input')?.focus();
+  const inputs = document.querySelectorAll(`[data-step="${step}"] input`);
+  [...inputs].find((input) => input.offsetParent !== null)?.focus();
 }
 
 function startSettle(monthKey) {
   settle = {
     monthKey,
     step: 1,
-    inputs: { base: '' },
+    context: settlementContext(state, monthKey),
+    inputs: { base: '', save: '', carry: '' },
     categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
     allocations: {},
     confirmId: null,
   };
   document.getElementById('settle-form').reset();
   showCategoryError('');
+  renderLastMonth();
   renderSettle();
 }
 

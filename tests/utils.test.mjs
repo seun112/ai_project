@@ -241,14 +241,45 @@ test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
 });
 
 test('calcSettlement 총 금액', { skip: !has('calcSettlement') }, () => {
-  const calc = (base) => call(`calcSettlement({ base: ${q(base)} })`);
-  assert.deepEqual(calc('1,000,000'), { base: 1000000, carryIn: 0, deduction: 0, total: 1000000, why: '', ok: true });
+  const calc = (base) => call(`calcSettlement({ mode: 'first', amount: 0 }, { base: ${q(base)} })`);
+  assert.deepEqual(calc('1,000,000'), { base: 1000000, carryIn: 0, deduction: 0, piggyIn: 0, total: 1000000, why: '', ok: true });
   assert.equal(calc('').why, 'empty');
   assert.equal(calc('   ').why, 'empty');
   assert.equal(calc('1.5').why, 'base');
   assert.equal(calc('abc').why, 'base');
   assert.equal(calc('0').why, 'total');
   assert.equal(calc('1').ok, true);
+});
+
+test('calcSettlement 남은 돈 처리', { skip: !has('calcSettlement') }, () => {
+  const calc = (inputs) => call(`calcSettlement({ mode: 'leftover', amount: 120000 }, ${q({ base: '1,000,000', ...inputs })})`);
+  const ok = calc({ save: '70,000', carry: '50,000' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.piggyIn, 70000);
+  assert.equal(ok.carryIn, 50000);
+  assert.equal(ok.total, 1050000);
+  assert.equal(calc({ save: '120,000', carry: '' }).ok, true, '빈칸은 0원');
+  assert.equal(calc({ save: '', carry: '120000' }).total, 1120000);
+  assert.equal(calc({ save: '', carry: '' }).why, 'sum');
+  assert.equal(calc({ save: '70000', carry: '49999' }).why, 'sum');
+  assert.equal(calc({ save: '70000', carry: '50001' }).why, 'sum');
+  assert.equal(calc({ save: '1.5', carry: '50000' }).why, 'bad');
+  assert.equal(calc({ save: '70000', carry: 'abc' }).why, 'bad');
+  assert.equal(call(`calcSettlement({ mode: 'leftover', amount: 100 }, { base: 'abc', save: '1.5' })`).why, 'base', '기본 금액 오류가 먼저');
+  assert.equal(call(`calcSettlement({ mode: 'leftover', amount: 100 }, { base: '', carry: '100' })`).why, 'empty');
+  assert.equal(call(`calcSettlement({ mode: 'leftover', amount: 100 }, { base: '0', carry: '100' })`).ok, true, '기본 0원이어도 이월로 1원 이상');
+  assert.equal(call(`calcSettlement({ mode: 'leftover', amount: 100 }, { base: '0', save: '100' })`).why, 'total');
+});
+
+test('settlementContext', { skip: !has('settlementContext') }, () => {
+  const data = (spent) => q({
+    months: { '2026-10': { total: 1000, settled: true } },
+    expenses: [{ date: '2026-10-05', amount: spent }],
+  });
+  assert.equal(call(`settlementContext({ months: {}, expenses: [] }, '2026-11').mode`), 'first');
+  assert.deepEqual(call(`settlementContext(${data(700)}, '2026-11')`), { mode: 'leftover', lastMonth: '2026-10', amount: 300 });
+  assert.equal(call(`settlementContext(${data(1000)}, '2026-11').mode`), 'even');
+  assert.equal(call(`settlementContext(${data(700)}, '2027-02').lastMonth`), '2026-10', '건너뛴 달은 마지막 정산 달 기준');
 });
 
 test('formatDate는 요일을 붙인다', { skip: !has('formatDate') }, () => {

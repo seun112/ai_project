@@ -149,6 +149,39 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`saveState();`);
   check('저장 성공하면 안내 사라짐', await evaluate(isHidden('save-error')));
 
+  // 지난달 남은 돈 처리
+  await size(1200, 800);
+  const seedLastMonth = (spent, piggy = 0) => `(() => {
+    const d = JSON.parse(localStorage.getItem('living-budget'));
+    d.months['2026-10'] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations: {}, settled: true };
+    d.expenses.push({ id: 'old', date: '2026-10-05', categoryId: d.categories[0].id, amount: ${spent}, memo: '' });
+    d.piggy.balance = ${piggy};
+    localStorage.setItem('living-budget', JSON.stringify(d));
+  })()`;
+  await setToday('2026-11-15');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(seedLastMonth(880000));
+  await reload();
+  check('남은 돈: 결과 상자 표시', (await evaluate(text('left-label'))) === '10월 남은 돈' && (await evaluate(text('left-amount'))) === '+120,000원');
+  check('남은 돈: 소제목', (await evaluate(text('left-title'))) === '남은 120,000원을 어떻게 할까요?');
+  check('남은 돈: 저축 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'save-amount');
+  await evaluate(type('base-amount', '1,000,000'));
+  check('합이 안 맞으면 다음 비활성과 안내', (await evaluate(nextDisabled)) && (await evaluate(text('settle-error'))) === '저축과 이월을 더한 금액이 남은 120,000원과 같아야 해요.', await evaluate(text('settle-error')));
+  await evaluate(type('save-amount', '70,000'));
+  await evaluate(type('carry-amount', '1.5'));
+  check('잘못된 금액: 칸 표시와 안내', (await evaluate(`document.getElementById('carry-amount').getAttribute('aria-invalid')`)) === 'true' && (await evaluate(text('settle-error'))) === '금액은 원 단위 숫자만 입력할 수 있어요.');
+  await evaluate(type('carry-amount', '50,000'));
+  check('합이 맞으면 다음 활성', !(await evaluate(nextDisabled)) && (await evaluate(isHidden('settle-error'))));
+  check('이월이 총 금액에 반영', (await evaluate(text('calc-carry'))) === '+ 50,000원' && (await evaluate(text('calc-total'))) === '1,050,000원');
+  console.log('shot', await shot('settle-leftover'));
+  await evaluate(next);
+  check('2단계 총 금액에 이월 반영', (await evaluate(text('alloc-total'))) === '1,050,000원');
+  await evaluate(alloc(0, '1,050,000'));
+  await evaluate(next);
+  const leftoverMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
+  check('이월 저장', leftoverMonth.baseAmount === 1000000 && leftoverMonth.carryIn === 50000 && leftoverMonth.total === 1050000);
+
   // 탭을 열어둔 채 달이 바뀐 경우
   await size(1200, 800);
   await setToday('2026-11-20');
@@ -260,6 +293,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
 
   await setToday('2026-12-02');
   await reload();
+  await evaluate(type('save-amount', '100,000'));
   await evaluate(type('base-amount', '100,000'));
   await evaluate(next);
   check('다음 달 정산에 숨긴 분류가 나오지 않음', (await names()) === '취미', await names());
