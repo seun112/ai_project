@@ -206,6 +206,18 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(type('piggy-amount', '30,000'));
   check('저금통 차감: 나머지만 다음 달에서 차감', (await evaluate(text('calc-deduction'))) === '- 55,000원' && (await evaluate(text('calc-total'))) === '945,000원');
   console.log('shot', await shot('settle-over'));
+  const dialogFits = `(() => {
+    const overlay = document.getElementById('overlay');
+    const box = document.querySelector('.dialog').getBoundingClientRect();
+    return overlay.scrollWidth <= overlay.clientWidth && box.left >= 0 && box.right <= innerWidth;
+  })()`;
+  for (const width of [400, 320]) {
+    await size(width, 800);
+    check(`정산 창 ${width}px 넘침 없음`, await evaluate(dialogFits));
+    check(`화면 ${width}px 넘침 없음`, !(await evaluate(overflow)));
+    console.log('shot', await shot(`settle-over-${width}`));
+  }
+  await size(1200, 800);
   await evaluate(type('piggy-amount', '90,000'));
   check('한도 초과: 다음 비활성과 안내', (await evaluate(nextDisabled)) && (await evaluate(text('mix-msg'))) === '85,000원까지만 뺄 수 있어요', await evaluate(text('mix-msg')));
   await evaluate(type('piggy-amount', 'abc'));
