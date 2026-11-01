@@ -405,6 +405,27 @@ test('usedPercent', { skip: !has('usedPercent') }, () => {
   assert.equal(call('usedPercent(10, 0)'), 100, '배분 0원인데 지출 있음');
 });
 
+test('dayTotals', { skip: !has('dayTotals') }, () => {
+  const data = q({ expenses: [
+    { date: '2026-10-31', amount: 1 },
+    { date: '2026-11-03', amount: 100 },
+    { date: '2026-11-03', amount: 50 },
+    { date: '2026-11-30', amount: 7 },
+  ] });
+  assert.deepEqual(call(`dayTotals(${data}, '2026-11')`), { '2026-11-03': 150, '2026-11-30': 7 });
+});
+
+test('earliestMonth', { skip: !has('earliestMonth') }, () => {
+  assert.equal(call(`earliestMonth({ expenses: [], months: {} }, '2026-11')`), '2026-11');
+  assert.equal(call(`earliestMonth({ expenses: [{ date: '2026-08-02' }], months: { '2026-09': {} } }, '2026-11')`), '2026-08');
+  assert.equal(call(`earliestMonth({ expenses: [], months: { '2026-09': {} } }, '2026-11')`), '2026-09', '지출 없이 정산만 있는 달');
+});
+
+test('formatDay', { skip: !has('formatDay') }, () => {
+  assert.equal(call(`formatDay('2026-11-14')`), '11월 14일 (토)');
+  assert.equal(call(`formatDay('2026-01-05')`), '1월 5일 (월)');
+});
+
 test('분류 표시', { skip: !has('categoryName') }, () => {
   const data = q({ categories: [{ id: 'a', name: '식비', hidden: false }, { id: 'b', name: '의류', hidden: true }] });
   assert.deepEqual(call(`visibleCategories(${data}).map((c) => c.id)`), ['a']);

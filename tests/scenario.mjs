@@ -478,5 +478,60 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`document.querySelector('[data-act="add-expense"]').click()`);
   check('열어둔 채 달이 바뀌면 입력 대신 정산 창', !(await evaluate(isHidden('overlay'))) && (await evaluate(appBlocked)));
   check('달이 바뀐 뒤 입력은 기록되지 않음', (await expenses()).length === countBefore);
+
+  // 달력 보기
+  await setToday('2026-11-14');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(type('base-amount', '1,000,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '1,000,000'));
+  await evaluate(next);
+  await evaluate(`(() => {
+    const d = JSON.parse(localStorage.getItem('living-budget'));
+    const [food, cloth] = d.categories;
+    d.months['2026-10'] = { baseAmount: 900000, carryIn: 0, deduction: 0, total: 900000, allocations: {}, settled: true };
+    d.expenses.push(
+      { id: 'n1', date: '2026-11-03', categoryId: food.id, amount: 100000, memo: '장보기' },
+      { id: 'n2', date: '2026-11-03', categoryId: cloth.id, amount: 36500, memo: '' },
+      { id: 'n3', date: '2026-11-14', categoryId: food.id, amount: 9000, memo: '점심' },
+      { id: 'o1', date: '2026-10-20', categoryId: food.id, amount: 70000, memo: '모임' },
+    );
+    localStorage.setItem('living-budget', JSON.stringify(d));
+  })()`);
+  await reload();
+  const openTab = (name) => `document.querySelector('[data-view="${name}"]').click()`;
+  const dayBtn = (date) => `document.querySelector('[data-date="${date}"]')`;
+  const dayText = (date) => `${dayBtn(date)}.textContent`;
+  await evaluate(openTab('calendar'));
+  check('달력: 제목과 이 달 쓴 돈', (await evaluate(text('cal-month'))) === '2026년 11월' && (await evaluate(text('cal-spent'))) === '이 달 쓴 돈 145,500원');
+  check('달력: 날짜 칸 30개', (await evaluate(`document.querySelectorAll('.day').length`)) === 30);
+  check('달력: 1일이 일요일 칸', (await evaluate(`document.querySelectorAll('.cal-grid [aria-hidden="true"]:not(.wd)').length`)) === 6);
+  check('달력: 요일 순서 월~일', (await evaluate(`[...document.querySelectorAll('.wd')].map((w) => w.textContent).join('')`)) === '월화수목금토일');
+  check('달력: 쓴 날은 합계와 표시', (await evaluate(dayText('2026-11-03'))) === '3136,500원' && (await evaluate(`${dayBtn('2026-11-03')}.classList.contains('has')`)));
+  check('달력: 안 쓴 날은 0', (await evaluate(dayText('2026-11-04'))) === '40' && !(await evaluate(`${dayBtn('2026-11-04')}.classList.contains('has')`)));
+  check('달력: 오늘 표시', (await evaluate(`${dayBtn('2026-11-14')}.classList.contains('today')`)) && (await evaluate(dayText('2026-11-14'))).includes('오늘'));
+  check('달력: 처음에는 오늘 선택', (await evaluate(`${dayBtn('2026-11-14')}.getAttribute('aria-pressed')`)) === 'true' && (await evaluate(text('day-total'))) === '9,000원');
+  check('달력: 이번 달 남은 돈', (await evaluate(text('cal-remain'))) === '이번 달 남은 돈 854,500원');
+  check('달력: 이번 달에서 다음 달 버튼 비활성', await evaluate(`document.querySelector('[data-act="cal-next"]').disabled`));
+  await evaluate(`${dayBtn('2026-11-03')}.click()`);
+  check('날짜를 누르면 합계와 내역', (await evaluate(text('day-total'))) === '136,500원' && (await evaluate(`document.querySelectorAll('#day-list .line').length`)) === 2);
+  check('내역에 분류, 메모, 금액', (await evaluate(`document.querySelector('#day-list .line').textContent`)) === '식비장보기100,000원');
+  check('메모 없는 내역 표시', (await evaluate(`document.querySelectorAll('#day-list .line')[1].textContent`)).includes('메모 없음'));
+  await evaluate(`${dayBtn('2026-11-04')}.click()`);
+  check('쓴 돈 없는 날 안내', (await evaluate(text('day-list'))) === '이 날은 쓴 돈이 없어요.' && (await evaluate(text('day-total'))) === '0원');
+  console.log('shot', await shot('calendar'));
+
+  await evaluate(`document.querySelector('[data-act="cal-prev"]').click()`);
+  check('지난달 이동: 제목과 이 달 쓴 돈', (await evaluate(text('cal-month'))) === '2026년 10월' && (await evaluate(text('cal-spent'))) === '이 달 쓴 돈 70,000원');
+  check('지난달: 날짜 선택 없이 시작', (await evaluate(`document.querySelector('.day[aria-pressed="true"]') === null`)) && (await evaluate(`document.querySelector('.cal-side').textContent`)).includes('날짜를 누르면'));
+  check('지난달: 읽기 전용 라벨', (await evaluate(text('cal-lock'))) === '지난달 기록 · 볼 수만 있어요');
+  check('지난달: 남은 돈 없음', await evaluate(`document.getElementById('cal-remain') === null`));
+  check('가장 이른 달에서 이전 버튼 비활성', await evaluate(`document.querySelector('[data-act="cal-prev"]').disabled`));
+  await evaluate(`${dayBtn('2026-10-20')}.click()`);
+  check('지난달 날짜도 내역을 볼 수 있음', (await evaluate(text('day-total'))) === '70,000원');
+  console.log('shot', await shot('calendar-last-month'));
+  await evaluate(`document.querySelector('[data-act="cal-next"]').click()`);
+  check('이번 달로 돌아오면 오늘 선택', (await evaluate(text('cal-month'))) === '2026년 11월' && (await evaluate(text('day-total'))) === '9,000원');
   await setToday(null);
 }
