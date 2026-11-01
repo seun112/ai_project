@@ -67,12 +67,49 @@ test('allocationSummary', { skip: !has('allocationSummary') }, () => {
 test('applySettlement', { skip: !has('applySettlement') }, () => {
   const month = { baseAmount: 900, carryIn: 200, deduction: 100, total: 1000, allocations: { a: 1000 } };
   const data = call(`(() => {
-    const d = { months: { '2026-10': { total: 1, settled: true } } };
-    applySettlement(d, '2026-11', ${q(month)});
+    const d = { categories: [{ id: 'a', name: '식비', hidden: false }], expenses: [], months: { '2026-10': { total: 1, settled: true } } };
+    applySettlement(d, '2026-11', { ...${q(month)}, categories: [{ id: 'a', name: '식비' }] });
     return d;
   })()`);
   assert.deepEqual(data.months['2026-11'], { ...month, settled: true });
   assert.deepEqual(data.months['2026-10'], { total: 1, settled: true }, '다른 달은 그대로');
+  assert.deepEqual(data.categories, [{ id: 'a', name: '식비', hidden: false }]);
+});
+
+test('categoryNameError', { skip: !has('categoryNameError') }, () => {
+  const cats = q([{ name: '식비' }, { name: '교통' }]);
+  const error = (name) => call(`categoryNameError(${q(name)}, ${cats})`);
+  assert.equal(error('반려동물'), '');
+  assert.equal(error('  반려동물  '), '', '앞뒤 공백은 빼고 판단');
+  assert.equal(error('가나다라마바사아자차'), '', '10자는 허용');
+  assert.equal(error(''), '분류 이름을 입력해 주세요.');
+  assert.equal(error('   '), '분류 이름을 입력해 주세요.');
+  assert.equal(error('가나다라마바사아자차카'), '분류 이름은 10자 이하로 입력해 주세요.');
+  assert.equal(error('식비'), '이미 있는 분류예요.');
+  assert.equal(error(' 교통 '), '이미 있는 분류예요.');
+});
+
+test('applyCategories', { skip: !has('applyCategories') }, () => {
+  const before = [
+    { id: 'a', name: '식비', hidden: false },
+    { id: 'b', name: '의류', hidden: false },
+    { id: 'c', name: '취미', hidden: false },
+    { id: 'old', name: '예전', hidden: true },
+    { id: 'gone', name: '내역 없음', hidden: true },
+  ];
+  const expenses = [{ categoryId: 'b' }, { categoryId: 'old' }];
+  const drafts = [{ id: 'a', name: '식비' }, { id: 'new', name: '반려동물' }];
+  const result = call(`(() => {
+    const d = { categories: ${q(before)}, expenses: ${q(expenses)} };
+    applyCategories(d, ${q(drafts)});
+    return d.categories;
+  })()`);
+  assert.deepEqual(result, [
+    { id: 'a', name: '식비', hidden: false },
+    { id: 'b', name: '의류', hidden: true },
+    { id: 'old', name: '예전', hidden: true },
+    { id: 'new', name: '반려동물', hidden: false },
+  ], '내역 있는 분류는 숨기고, 내역 없는 분류는 지우고, 새 분류는 뒤에 붙임');
 });
 
 test('formatWon', () => {

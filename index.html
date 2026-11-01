@@ -183,6 +183,43 @@
     margin-top: 1rem;
     color: var(--ink-soft);
   }
+  .x {
+    display: inline-flex;
+    flex: none;
+    justify-content: center;
+    align-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 1px solid var(--ink);
+    border-radius: 50%;
+    background: var(--surface);
+  }
+  .x svg { stroke: var(--ink); }
+  .x:disabled { border-color: var(--line); background: var(--line); cursor: not-allowed; }
+  .confirm {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--seal);
+    border-radius: 4px;
+  }
+  .add-cat {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px dashed var(--ink-soft);
+    border-radius: 4px;
+  }
+  .add-cat .field { flex: 1 1 12rem; width: auto; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   .field-label { display: block; margin-bottom: 0.25rem; font-weight: 700; }
 
@@ -302,6 +339,12 @@
         <h1>분류별로 나눠 주세요</h1>
         <div class="result"><span>이번 달 총 금액</span><strong class="amt" id="alloc-total"></strong></div>
         <div id="alloc-rows"></div>
+        <div class="add-cat">
+          <label class="sr" for="new-cat">새 분류 이름</label>
+          <input class="field" id="new-cat" maxlength="12" placeholder="새 분류 이름 (예: 반려동물)" autocomplete="off" aria-describedby="cat-error">
+          <button class="button" type="button" data-act="add-cat">+ 분류 추가</button>
+        </div>
+        <p class="field-error over" id="cat-error" role="alert" hidden></p>
         <div class="calc"><span>배분 합계</span><span id="alloc-sum"></span></div>
         <p class="sum"><span>아직 나누지 않은 금액</span><strong id="alloc-left"></strong></p>
         <p class="field-error over" id="alloc-hint" role="status" hidden></p>
@@ -357,6 +400,7 @@
 const STORAGE_KEY = 'living-budget';
 const DATA_VERSION = 1;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
+const CATEGORY_NAME_MAX = 10;
 
 // ---- 금액 유틸 ----
 
@@ -554,8 +598,32 @@ function wizardSteps(data, monthKey) {
   return lastSettledMonth(data, monthKey) === null ? steps : ['result', ...steps];
 }
 
+// 분류 이름의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
+function categoryNameError(name, categories) {
+  const trimmed = name.trim();
+  if (trimmed === '') return '분류 이름을 입력해 주세요.';
+  if (trimmed.length > CATEGORY_NAME_MAX) return `분류 이름은 ${CATEGORY_NAME_MAX}자 이하로 입력해 주세요.`;
+  if (categories.some((category) => category.name === trimmed)) return '이미 있는 분류예요.';
+  return '';
+}
+
+// 정산에서 정한 목록을 반영한다. 목록에서 빠진 분류는 지출 내역이 있으면 지난 기록을 위해 숨기기만 한다.
+function applyCategories(data, drafts) {
+  const kept = new Set(drafts.map(({ id }) => id));
+  const known = new Set(data.categories.map(({ id }) => id));
+  const used = new Set(data.expenses.map((expense) => expense.categoryId));
+  const existing = data.categories
+    .filter((category) => kept.has(category.id) || used.has(category.id))
+    .map((category) => ({ ...category, hidden: !kept.has(category.id) }));
+  const added = drafts
+    .filter(({ id }) => !known.has(id))
+    .map(({ id, name }) => ({ id, name, hidden: false }));
+  data.categories = [...existing, ...added];
+}
+
 // 정산 결과는 이 함수에서 한 번에 기록한다.
-function applySettlement(data, monthKey, { baseAmount, carryIn, deduction, total, allocations }) {
+function applySettlement(data, monthKey, { baseAmount, carryIn, deduction, total, allocations, categories }) {
+  applyCategories(data, categories);
   data.months[monthKey] = { baseAmount, carryIn, deduction, total, allocations, settled: true };
 }
 
@@ -624,12 +692,26 @@ function totalStepError() {
   return wizardTotal() < 1 ? '총 금액은 1원 이상이어야 합니다.' : '';
 }
 
+const ICON_X = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13" stroke-width="2.5" stroke-linecap="round" fill="none"></path></svg>';
+
 function allocationRow({ id, name }) {
   const safeId = escapeHtml(id);
+  const safeName = escapeHtml(name);
+  if (wizard.confirmId === id) {
+    return `<div class="confirm" role="alert">
+      <span>${safeName} 분류를 삭제할까요? 이번 달부터 목록에서 빠져요.</span>
+      <span class="button-row">
+        <button class="button" type="button" data-act="del-yes" data-id="${safeId}">삭제</button>
+        <button class="button" type="button" data-act="del-no" data-id="${safeId}">취소</button>
+      </span>
+    </div>`;
+  }
+  const lastOne = wizard.categories.length <= 1 ? ' disabled' : '';
   return `<div class="frow">
-    <label for="alloc-${safeId}">${escapeHtml(name)}</label>
+    <label for="alloc-${safeId}">${safeName}</label>
     <div class="unit">
       <input class="field right" id="alloc-${safeId}" data-alloc="${safeId}" inputmode="numeric" autocomplete="off" placeholder="0" value="${escapeHtml(wizard.allocations[id] ?? '')}"><span>원</span>
+      <button class="x" type="button" data-act="del-ask" data-id="${safeId}" aria-label="${safeName} 분류 삭제"${lastOne}>${ICON_X}</button>
     </div>
   </div>`;
 }
@@ -665,6 +747,48 @@ function handleAllocationInput(event) {
   renderAllocateSummary();
 }
 
+function showCategoryError(message) {
+  const error = document.getElementById('cat-error');
+  error.textContent = message;
+  error.hidden = message === '';
+}
+
+function addCategory() {
+  const input = document.getElementById('new-cat');
+  const message = categoryNameError(input.value, wizard.categories);
+  showCategoryError(message);
+  if (message === '') {
+    wizard.categories.push({ id: createId('cat'), name: input.value.trim() });
+    input.value = '';
+    renderAllocateStep();
+  }
+  input.focus();
+}
+
+function removeCategory(id) {
+  if (wizard.categories.length <= 1) return;
+  wizard.categories = wizard.categories.filter((category) => category.id !== id);
+  delete wizard.allocations[id];
+  wizard.confirmId = null;
+  showCategoryError('');
+  renderAllocateStep();
+  document.getElementById('new-cat').focus();
+}
+
+function handleCategoryClick(event) {
+  const button = event.target.closest('[data-act]');
+  if (button === null) return;
+  const { act, id } = button.dataset;
+  if (act === 'add-cat') addCategory();
+  if (act === 'del-yes') removeCategory(id);
+  if (act === 'del-ask' || act === 'del-no') {
+    wizard.confirmId = act === 'del-ask' ? id : null;
+    renderAllocateStep();
+    const next = act === 'del-ask' ? '[data-act="del-no"]' : `[data-act="del-ask"][data-id="${CSS.escape(id)}"]`;
+    document.querySelector(next).focus();
+  }
+}
+
 function saveWizard() {
   const { monthKey, categories, allocations, carryIn, deduction } = wizard;
   const total = wizardTotal();
@@ -675,6 +799,7 @@ function saveWizard() {
     deduction,
     total,
     allocations: Object.fromEntries(categories.map(({ id }) => [id, parseOptionalAmount(allocations[id]).value])),
+    categories,
   });
   wizard = null;
   saveState();
@@ -709,8 +834,10 @@ function startWizard(monthKey) {
     deduction: 0,
     categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
     allocations: {},
+    confirmId: null,
   };
   document.getElementById('wizard-form').reset();
+  showCategoryError('');
   showFieldError(document.getElementById('base-amount'), document.getElementById('base-error'), '');
   renderResultStep();
   renderTotalStep();
@@ -788,9 +915,16 @@ function init() {
   document.getElementById('wizard-form').addEventListener('submit', handleWizardSubmit);
   document.getElementById('wizard-back').addEventListener('click', () => moveWizard(-1));
   document.getElementById('alloc-rows').addEventListener('input', handleAllocationInput);
+  document.querySelector('[data-step="allocate"]').addEventListener('click', handleCategoryClick);
   // 금액을 넣다가 Enter로 바로 저장되지 않게 한다. 저장은 버튼으로만 한다.
-  document.getElementById('alloc-rows').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') event.preventDefault();
+  document.querySelector('[data-step="allocate"]').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    if (event.target.id === 'new-cat') {
+      event.preventDefault();
+      addCategory();
+    } else if (event.target.matches('[data-alloc]')) {
+      event.preventDefault();
+    }
   });
   document.getElementById('base-amount').addEventListener('input', (event) => {
     showFieldError(event.target, document.getElementById('base-error'), '');

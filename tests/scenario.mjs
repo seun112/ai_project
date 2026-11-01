@@ -178,8 +178,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('저장 차단: 제출해도 기록되지 않음', Object.keys(JSON.parse(await evaluate(raw)).months).length === 0);
   await evaluate(alloc(2, ''));
   check('합계가 맞으면 저장 활성', !(await evaluate(`${nextBtn}.disabled`)));
-  await evaluate(`document.querySelector('[data-alloc]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))`);
-  check('입력칸 Enter로는 저장되지 않음', !(await evaluate(isHidden('wizard'))));
+  const enter = (selector) => `!document.querySelector('${selector}').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))`;
+  check('금액 칸 Enter는 저장으로 이어지지 않음', await evaluate(enter('[data-alloc]')));
+  check('삭제 버튼 Enter는 막지 않음', !(await evaluate(enter('[data-act="del-ask"]'))));
   await evaluate(next);
   check('저장 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
   const saved = Object.values(JSON.parse(await evaluate(raw)).months);
@@ -187,4 +188,77 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('배분 저장, 빈칸은 0원', Object.values(saved[0].allocations).join() === '600000,400000,0,0,0', Object.values(saved[0].allocations).join());
   await reload();
   check('새로고침해도 정산 창이 다시 뜨지 않음', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
+
+  // 분류 추가와 삭제
+  await setToday('2026-11-15');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(`(() => {
+    const d = JSON.parse(localStorage.getItem('living-budget'));
+    d.expenses.push({ id: 'e1', date: '2026-10-03', categoryId: d.categories[0].id, amount: 1000, memo: '' });
+    localStorage.setItem('living-budget', JSON.stringify(d));
+  })()`);
+  await reload();
+  await evaluate(type('base-amount', '100,000'));
+  await evaluate(next);
+  const rows = () => evaluate(`document.querySelectorAll('[data-alloc]').length`);
+  const names = () => evaluate(`[...document.querySelectorAll('#alloc-rows label')].map((l) => l.textContent).join()`);
+  const addCat = async (name) => {
+    await evaluate(type('new-cat', name));
+    await evaluate(`document.querySelector('[data-act="add-cat"]').click()`);
+  };
+  const removeCat = async (name) => {
+    await evaluate(`document.querySelector('[aria-label="${name} 분류 삭제"]').click()`);
+    await evaluate(`document.querySelector('[data-act="del-yes"]').click()`);
+  };
+  for (const [name, message] of [['', '분류 이름을 입력해 주세요.'], ['가나다라마바사아자차카', '분류 이름은 10자 이하로 입력해 주세요.'], ['식비', '이미 있는 분류예요.']]) {
+    await addCat(name);
+    check(`분류 이름 "${name}": 막히고 안내`, (await rows()) === 5 && (await evaluate(text('cat-error'))) === message, await evaluate(text('cat-error')));
+  }
+  await addCat('반려동물');
+  check('분류 추가', (await rows()) === 6 && (await names()).endsWith('반려동물'));
+  check('추가하면 안내와 입력값이 지워짐', (await evaluate(isHidden('cat-error'))) && (await evaluate(`document.getElementById('new-cat').value`)) === '');
+  check('추가 후 이름 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'new-cat');
+  await evaluate(type('new-cat', '여행'));
+  check('이름 칸 Enter로 추가', await evaluate(enter('#new-cat')));
+  check('Enter로 추가한 분류 표시', (await rows()) === 7);
+  await addCat('<b>x</b>');
+  check('분류 이름의 태그는 글자로 표시', await evaluate(`document.querySelector('#alloc-rows b') === null`));
+
+  await evaluate(alloc(0, '100,000'));
+  await evaluate(`document.querySelector('[aria-label="식비 분류 삭제"]').click()`);
+  check('삭제 전 확인 표시', /^식비 분류를 삭제할까요\? 이번 달부터 목록에서 빠져요\.$/.test(await evaluate(`document.querySelector('.confirm span').textContent`)));
+  check('확인 줄의 취소에 포커스', (await evaluate(`document.activeElement.dataset.act`)) === 'del-no');
+  console.log('shot', await shot('allocate-confirm'));
+  await evaluate(`document.querySelector('[data-act="del-no"]').click()`);
+  check('취소하면 분류와 금액 유지', (await rows()) === 8 && (await evaluate(`document.querySelectorAll('[data-alloc]')[0].value`)) === '100,000');
+  await size(400, 800);
+  check('배분 단계 400px 넘침 없음', !(await evaluate(overflow)));
+  console.log('shot', await shot('allocate-narrow'));
+  await size(1200, 800);
+
+  await removeCat('식비');
+  check('삭제하면 금액도 합계에서 빠짐', (await rows()) === 7 && (await evaluate(text('alloc-sum'))) === '0원');
+  await removeCat('의류');
+  await removeCat('교통');
+  await removeCat('기타');
+  await removeCat('여행');
+  await removeCat('반려동물');
+  await removeCat('<b>x</b>');
+  check('한 개 남으면 삭제 버튼 비활성', (await rows()) === 1 && (await evaluate(`document.querySelector('[data-act="del-ask"]').disabled`)));
+  await evaluate(alloc(0, '100,000'));
+  await evaluate(next);
+  check('분류를 바꿔도 저장 후 앱 표시', !(await evaluate(isHidden('app'))));
+  const cats = JSON.parse(await evaluate(raw)).categories;
+  check('지출 있는 분류는 숨김, 없는 분류는 삭제', cats.map((c) => `${c.name}:${c.hidden}`).join() === '식비:true,취미:false', cats.map((c) => `${c.name}:${c.hidden}`).join());
+  const month = JSON.parse(await evaluate(raw)).months['2026-11'];
+  check('배분은 남은 분류만 저장', Object.values(month.allocations).join() === '100000' && Object.keys(month.allocations)[0] === cats[1].id);
+
+  await setToday('2026-12-02');
+  await reload();
+  await evaluate(next);
+  await evaluate(type('base-amount', '100,000'));
+  await evaluate(next);
+  check('다음 달 정산에 숨긴 분류가 나오지 않음', (await names()) === '취미', await names());
+  await setToday(null);
 }
