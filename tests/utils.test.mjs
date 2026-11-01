@@ -323,6 +323,37 @@ test('computeTotal', { skip: !has('computeTotal') }, () => {
   assert.equal(call('computeTotal(100, 0, 300)'), -200);
 });
 
+test('expenseError', { skip: !has('expenseError') }, () => {
+  assert.equal(call(`expenseError('a', '9,000')`), '');
+  assert.equal(call(`expenseError('a', '1')`), '');
+  assert.equal(call(`expenseError('', '9000')`), '분류를 먼저 골라 주세요.');
+  for (const text of ['', '1.5', '-1', 'abc']) assert.equal(call(`expenseError('a', ${q(text)})`), '금액은 원 단위 숫자만 입력할 수 있어요.', text);
+  assert.equal(call(`expenseError('a', '0')`), '1원 이상 입력해 주세요.');
+});
+
+test('지출 추가와 삭제', { skip: !has('addExpense') }, () => {
+  const d = call(`(() => {
+    const d = { expenses: [] };
+    addExpense(d, { date: '2026-11-14', categoryId: 'a', amount: 9000, memo: '점심' });
+    addExpense(d, { date: '2026-11-14', categoryId: 'b', amount: 1000, memo: '' });
+    addExpense(d, { date: '2026-11-13', categoryId: 'a', amount: 500, memo: '' });
+    const spent = daySpent(d, '2026-11-14');
+    deleteExpense(d, d.expenses[0].id);
+    return { spent, left: d.expenses, after: daySpent(d, '2026-11-14') };
+  })()`);
+  assert.equal(d.spent, 10000);
+  assert.equal(d.after, 1000);
+  assert.deepEqual(d.left.map((e) => e.amount), [1000, 500]);
+  assert.ok(d.left.every((e) => typeof e.id === 'string' && e.id));
+});
+
+test('분류 표시', { skip: !has('categoryName') }, () => {
+  const data = q({ categories: [{ id: 'a', name: '식비', hidden: false }, { id: 'b', name: '의류', hidden: true }] });
+  assert.deepEqual(call(`visibleCategories(${data}).map((c) => c.id)`), ['a']);
+  assert.equal(call(`categoryName(${data}, 'b')`), '의류', '숨긴 분류도 이름은 남음');
+  assert.equal(call(`categoryName(${data}, 'zzz')`), '삭제된 분류');
+});
+
 test('saveData 실패를 false로 알린다', { skip: !has('saveData') }, () => {
   const t = load();
   vm.runInContext(`localStorage.setItem = () => { throw new Error('QuotaExceededError'); };`, t.ctx);

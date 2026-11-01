@@ -380,5 +380,51 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(type('base-amount', '100,000'));
   await evaluate(next);
   check('다음 달 정산에 숨긴 분류가 나오지 않음', (await names()) === '취미', await names());
+
+  // 대시보드: 지출 입력과 오늘 내역
+  await setToday('2026-11-14');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(type('base-amount', '1,000,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '400,000'));
+  await evaluate(alloc(1, '600,000'));
+  await evaluate(next);
+  const expenses = async () => JSON.parse(await evaluate(raw)).expenses;
+  const enterExpense = async (amount, memo = '') => {
+    await evaluate(type('in-amt', amount));
+    await evaluate(type('in-memo', memo));
+    await evaluate(`document.querySelector('[data-act="add-expense"]').click()`);
+  };
+  const lines = () => evaluate(`[...document.querySelectorAll('[aria-label="오늘 쓴 내역"] .line')].map((l) => l.textContent).join('|')`);
+  check('정산 후 대시보드 표시', (await evaluate(text('today-spent'))) === '0원');
+  check('빈 내역 안내', (await evaluate(`document.querySelector('[aria-label="오늘 쓴 내역"]').textContent`)) === '오늘 쓴 돈이 아직 없어요.');
+  check('분류 칩 5개, 첫 분류 선택', (await evaluate(`document.querySelectorAll('[data-act="pick-category"]').length`)) === 5 && (await evaluate(`document.querySelector('[aria-pressed="true"]').textContent`)) === '식비');
+  for (const [amount, message] of [['', '금액은 원 단위 숫자만 입력할 수 있어요.'], ['1.5', '금액은 원 단위 숫자만 입력할 수 있어요.'], ['0', '1원 이상 입력해 주세요.']]) {
+    await enterExpense(amount);
+    check(`금액 "${amount}": 막히고 안내`, (await evaluate(text('in-err'))) === message && (await expenses()).length === 0);
+    check(`금액 "${amount}": 칸 표시`, (await evaluate(`document.getElementById('in-amt').getAttribute('aria-invalid')`)) === 'true');
+  }
+  await enterExpense('9,000', '점심 김치찌개');
+  check('지출 추가: 오늘 날짜로 기록', (await expenses())[0].date === '2026-11-14' && (await expenses())[0].amount === 9000 && (await expenses())[0].memo === '점심 김치찌개');
+  check('추가하면 오늘 쓴 돈과 내역이 바뀜', (await evaluate(text('today-spent'))) === '9,000원' && (await lines()) === '식비점심 김치찌개9,000원');
+  check('추가하면 입력칸이 비고 포커스 유지', (await evaluate(`document.getElementById('in-amt').value`)) === '' && (await evaluate(`document.activeElement.id`)) === 'in-amt');
+  check('오류 안내가 사라짐', await evaluate(isHidden('in-err')));
+  await evaluate(`document.querySelectorAll('[data-act="pick-category"]')[1].click()`);
+  await evaluate(type('in-amt', '4,500'));
+  check('Enter로 추가', await evaluate(enter('#in-amt')));
+  check('고른 분류로 기록, 메모 없음 표시', (await lines()).endsWith('의류메모 없음4,500원'), await lines());
+  check('오늘 쓴 돈 합계', (await evaluate(text('today-spent'))) === '13,500원');
+  await evaluate(type('in-amt', '777'));
+  await evaluate(`document.querySelectorAll('[data-act="pick-category"]')[2].click()`);
+  check('분류를 바꿔도 입력 중인 금액 유지', (await evaluate(`document.getElementById('in-amt').value`)) === '777');
+  await evaluate(type('in-amt', ''));
+  await evaluate(`document.querySelector('[data-act="delete-expense"]').click()`);
+  check('내역 삭제: 오늘 쓴 돈이 바로 바뀜', (await evaluate(text('today-spent'))) === '4,500원' && (await expenses()).length === 1);
+  await reload();
+  check('새로고침해도 지출 유지', (await evaluate(text('today-spent'))) === '4,500원');
+  await enterExpense('12345', '<b>메모</b>');
+  check('메모의 태그는 글자로 표시', await evaluate(`document.querySelector('[data-panel="dashboard"] .line b') === null`));
+  console.log('shot', await shot('dashboard-left'));
   await setToday(null);
 }

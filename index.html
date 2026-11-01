@@ -192,6 +192,11 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 
 /* 목업의 인라인 스타일을 옮긴 것 */
 .panel { flex: 1 1 100%; min-width: 0; }
+.panel.cols { display: flex; flex-wrap: wrap; gap: 32px; }
+.today-total { font-size: 32px; line-height: 1.3; }
+.amt-wrap { flex: 1 1 130px; display: flex; align-items: center; gap: 6px; }
+.memo-wrap { flex: 2 1 160px; }
+.field.full { width: 100%; }
 .dlg-title { display: flex; align-items: center; gap: 12px; }
 .dlg-title h2 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 30px; line-height: 1.25; }
 .step { display: flex; flex-direction: column; gap: 16px; }
@@ -250,7 +255,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
     </nav>
     <main class="book">
       <div class="inner">
-        <section class="panel" data-panel="dashboard"><p class="placeholder">오늘 지출과 이번 달 남은 돈이 여기에 표시됩니다.</p></section>
+        <section class="panel cols" data-panel="dashboard"></section>
         <section class="panel" data-panel="calendar" hidden><p class="placeholder">날짜별 지출이 여기에 표시됩니다.</p></section>
         <section class="panel" data-panel="settings" hidden><p class="placeholder">이번 달 금액을 여기에서 고칩니다.</p></section>
       </div>
@@ -636,6 +641,39 @@ function allocationSummary(categories, texts, total) {
   return { sum, bad, left, ok: !bad && left === 0 };
 }
 
+// ---- 지출 ----
+
+function visibleCategories(data) {
+  return data.categories.filter((category) => !category.hidden);
+}
+
+function categoryName(data, id) {
+  return data.categories.find((category) => category.id === id)?.name ?? '삭제된 분류';
+}
+
+// 지출 입력의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
+function expenseError(categoryId, amountText) {
+  if (!categoryId) return '분류를 먼저 골라 주세요.';
+  const parsed = parseAmount(amountText);
+  if (!parsed.ok) return '금액은 원 단위 숫자만 입력할 수 있어요.';
+  return parsed.value < 1 ? '1원 이상 입력해 주세요.' : '';
+}
+
+// 대시보드는 오늘 날짜로, 달력은 고른 날짜로 부른다.
+function addExpense(data, { date, categoryId, amount, memo }) {
+  data.expenses.push({ id: createId('exp'), date, categoryId, amount, memo });
+}
+
+function deleteExpense(data, id) {
+  data.expenses = data.expenses.filter((expense) => expense.id !== id);
+}
+
+function daySpent(data, dateKey) {
+  return data.expenses
+    .filter((expense) => expense.date === dateKey)
+    .reduce((sum, expense) => sum + expense.amount, 0);
+}
+
 // ---- 정산 창 ----
 
 // 입력 중인 값은 저장하지 않는다. 끝나기 전에 새로고침하면 창이 처음부터 다시 뜬다.
@@ -855,7 +893,7 @@ function startSettle(monthKey) {
     step: 1,
     context: settlementContext(state, monthKey),
     inputs: { base: '', save: '', carry: '', option: 'next', piggy: '' },
-    categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
+    categories: visibleCategories(state).map(({ id, name }) => ({ id, name })),
     allocations: {},
     confirmId: null,
   };
@@ -881,6 +919,90 @@ function handleSettleSubmit(event) {
   event.preventDefault();
   if (settle.step === 2) saveSettle();
   else if (currentCalc().ok) moveSettle(2);
+}
+
+// ---- 대시보드 ----
+
+const dashboard = { categoryId: '', error: '' };
+
+function categoryChips(categories, selectedId) {
+  return categories.map(({ id, name }) => `<button class="pill" type="button" data-act="pick-category" data-id="${escapeHtml(id)}" aria-pressed="${id === selectedId}">${escapeHtml(name)}</button>`).join('');
+}
+
+function todayRows(today) {
+  const rows = state.expenses.filter((expense) => expense.date === today).map(({ id, categoryId, amount, memo }) => {
+    const label = escapeHtml(memo || '지출');
+    return `<li class="line"><span class="tag">${escapeHtml(categoryName(state, categoryId))}</span><span class="grow">${escapeHtml(memo || '메모 없음')}</span><span class="tnum">${formatWon(amount)}</span><button class="x" type="button" data-act="delete-expense" data-id="${escapeHtml(id)}" aria-label="${label} 삭제">${ICON_X}</button></li>`;
+  }).join('');
+  return rows || '<li class="empty">오늘 쓴 돈이 아직 없어요.</li>';
+}
+
+// 다시 그려도 입력 중인 금액과 메모는 남긴다.
+function renderDashboard() {
+  const today = getToday();
+  if (needsSettlement(state, monthKeyOf(today))) return;
+  const categories = visibleCategories(state);
+  if (!categories.some(({ id }) => id === dashboard.categoryId)) dashboard.categoryId = categories[0]?.id ?? '';
+  const amount = document.getElementById('in-amt')?.value ?? '';
+  const memo = document.getElementById('in-memo')?.value ?? '';
+  const invalid = dashboard.error ? ' aria-invalid="true"' : '';
+  document.querySelector('[data-panel="dashboard"]').innerHTML = `<div class="col">
+    <div class="head-row"><span class="chip">오늘 쓴 돈</span><strong class="big today-total" id="today-spent">${formatWon(daySpent(state, today))}</strong></div>
+    <div class="entry">
+      <h2>오늘 지출 입력</h2>
+      <div class="pills" role="group" aria-label="분류">${categoryChips(categories, dashboard.categoryId)}</div>
+      <div class="fields">
+        <div class="amt-wrap"><label class="sr" for="in-amt">금액</label><input class="field right full" id="in-amt" inputmode="numeric" placeholder="금액" autocomplete="off" value="${escapeHtml(amount)}"${invalid}><span>원</span></div>
+        <div class="memo-wrap"><label class="sr" for="in-memo">메모</label><input class="field full" id="in-memo" maxlength="30" placeholder="메모 (예: 점심)" autocomplete="off" value="${escapeHtml(memo)}"></div>
+        <button class="btn go" type="button" data-act="add-expense">추가</button>
+      </div>
+      <p class="err" id="in-err" role="alert"${dashboard.error ? '' : ' hidden'}>${escapeHtml(dashboard.error)}</p>
+    </div>
+    <ul class="list" aria-label="오늘 쓴 내역">${todayRows(today)}</ul>
+  </div>`;
+}
+
+function submitExpense() {
+  const amountInput = document.getElementById('in-amt');
+  const memoInput = document.getElementById('in-memo');
+  dashboard.error = expenseError(dashboard.categoryId, amountInput.value);
+  if (dashboard.error === '') {
+    addExpense(state, {
+      date: getToday(),
+      categoryId: dashboard.categoryId,
+      amount: parseAmount(amountInput.value).value,
+      memo: memoInput.value.trim(),
+    });
+    amountInput.value = '';
+    memoInput.value = '';
+    saveState();
+  }
+  renderDashboard();
+  document.getElementById('in-amt').focus();
+}
+
+function handleDashboardClick(event) {
+  const button = event.target.closest('[data-act]');
+  if (button === null) return;
+  const { act, id } = button.dataset;
+  if (act === 'add-expense') submitExpense();
+  if (act === 'pick-category') {
+    dashboard.categoryId = id;
+    dashboard.error = '';
+    renderDashboard();
+  }
+  if (act === 'delete-expense') {
+    deleteExpense(state, id);
+    saveState();
+    renderDashboard();
+    document.getElementById('in-amt').focus();
+  }
+}
+
+function handleDashboardKeydown(event) {
+  if (event.key !== 'Enter' || !['in-amt', 'in-memo'].includes(event.target.id)) return;
+  event.preventDefault();
+  submitExpense();
 }
 
 // ---- 화면 ----
@@ -915,6 +1037,7 @@ function enterApp() {
   app.hidden = false;
   app.inert = settling;
   if (settling && settle?.monthKey !== monthKey) startSettle(monthKey);
+  renderDashboard();
 }
 
 function resetData() {
@@ -946,6 +1069,9 @@ function init() {
       event.preventDefault();
     }
   });
+  const dashboardPanel = document.querySelector('[data-panel="dashboard"]');
+  dashboardPanel.addEventListener('click', handleDashboardClick);
+  dashboardPanel.addEventListener('keydown', handleDashboardKeydown);
   document.addEventListener('visibilitychange', () => {
     if (state !== null && document.visibilityState === 'visible') enterApp();
   });
