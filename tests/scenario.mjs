@@ -768,5 +768,35 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('설정 320px 넘침 없음', !(await evaluate(overflow)));
   console.log('shot', await shot('settings-320'));
   await size(1200, 800);
+
+  // 두 달 이상 건너뛰고 접속
+  await setToday('2026-08-20');
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(type('base-amount', '1,000,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '1,000,000'));
+  await evaluate(next);
+  await enterExpense('900,000');
+  await setToday('2026-11-14');
+  await reload();
+  check('건너뛰고 접속: 정산 창 표시', !(await evaluate(isHidden('overlay'))));
+  check('건너뛰고 접속: 마지막 정산 달 기준', (await evaluate(text('left-label'))) === '8월 남은 돈' && (await evaluate(text('left-amount'))) === '+100,000원');
+  check('건너뛰고 접속: 11월 첫 정산', (await evaluate(text('settle-label'))) === '11월 첫 정산');
+  await evaluate(type('save-amount', '100,000'));
+  await evaluate(type('base-amount', '500,000'));
+  await evaluate(next);
+  await evaluate(alloc(0, '500,000'));
+  await evaluate(next);
+  const skipped = JSON.parse(await evaluate(raw));
+  check('건너뛴 달 자동 마감', Object.keys(skipped.months).sort().join() === '2026-08,2026-09,2026-10,2026-11' && skipped.months['2026-09'].skipped === true && skipped.months['2026-10'].total === null);
+  check('건너뛴 달은 지출 없음', !skipped.expenses.some((e) => e.date.startsWith('2026-09') || e.date.startsWith('2026-10')));
+  check('건너뛰어도 저금통 반영', skipped.piggy.balance === 100000);
+  await evaluate(openTab('calendar'));
+  await evaluate(`document.querySelector('[data-act="cal-prev"]').click()`);
+  check('건너뛴 달도 달력에서 열림', (await evaluate(text('cal-month'))) === '2026년 10월' && (await evaluate(text('cal-spent'))) === '이 달 쓴 돈 0원' && (await evaluate(text('cal-lock'))) === '지난달 기록 · 볼 수만 있어요');
+  await setToday('2026-12-02');
+  await reload();
+  check('건너뛴 다음 달은 방금 정산한 달 기준', (await evaluate(text('left-label'))) === '11월 남은 돈' && (await evaluate(text('left-amount'))) === '+500,000원');
   await setToday(null);
 }

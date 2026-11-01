@@ -106,6 +106,39 @@ test('정산 저장: 저금통과 미정산 기록', { skip: !has('applySettleme
   assert.deepEqual(plain.unsettled, []);
 });
 
+test('closeSkippedMonths', { skip: !has('closeSkippedMonths') }, () => {
+  const months = call(`(() => {
+    const d = { months: { '2026-08': { total: 100, settled: true }, '2026-09': { total: 5, settled: false } } };
+    closeSkippedMonths(d, '2026-08', '2026-12');
+    return d.months;
+  })()`);
+  assert.deepEqual(Object.keys(months).sort(), ['2026-08', '2026-09', '2026-10', '2026-11'], '이번 달은 만들지 않음');
+  assert.deepEqual(months['2026-09'], { total: 5, settled: false }, '있는 기록은 덮어쓰지 않음');
+  assert.equal(months['2026-10'].total, null, '총 금액 미설정');
+  assert.equal(months['2026-11'].settled, false);
+  assert.equal(months['2026-11'].skipped, true);
+
+  const yearEnd = call(`(() => { const d = { months: {} }; closeSkippedMonths(d, '2026-11', '2027-02'); return Object.keys(d.months).sort(); })()`);
+  assert.deepEqual(yearEnd, ['2026-12', '2027-01'], '연도 경계');
+  const none = call(`(() => { const d = { months: {} }; closeSkippedMonths(d, '2026-10', '2026-11'); closeSkippedMonths(d, null, '2026-11'); return d.months; })()`);
+  assert.deepEqual(none, {}, '건너뛴 달이 없거나 첫 정산');
+});
+
+test('건너뛴 달은 다음 정산의 기준이 되지 않는다', { skip: !has('applySettlement') }, () => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  const result = t.call(`(() => {
+    const d = { categories: [], expenses: [{ date: '2026-08-05', amount: 900 }], months: { '2026-08': { total: 1000, settled: true } }, piggy: { balance: 0, history: [] }, unsettled: [] };
+    const before = settlementContext(d, '2026-11');
+    applySettlement(d, '2026-11', { baseAmount: 500, carryIn: 0, deduction: 0, total: 500, allocations: {}, categories: [], lastMonth: '2026-08', piggyIn: 100 });
+    return { before, after: settlementContext(d, '2026-12'), last: lastSettledMonth(d, '2026-11'), sep: needsSettlement(d, '2026-09') };
+  })()`);
+  assert.deepEqual(result.before, { mode: 'leftover', lastMonth: '2026-08', amount: 100, piggyBalance: 0 }, '건너뛰어도 마지막 정산 달의 결과');
+  assert.equal(result.last, '2026-08', '건너뛴 달은 정산 달이 아님');
+  assert.equal(result.after.lastMonth, '2026-11', '다음 달은 방금 정산한 달 기준');
+  assert.equal(result.sep, true);
+});
+
 test('categoryNameError', { skip: !has('categoryNameError') }, () => {
   const cats = q([{ name: '식비' }, { name: '교통' }]);
   const error = (name) => call(`categoryNameError(${q(name)}, ${cats})`);

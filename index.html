@@ -651,6 +651,14 @@ function applyCategories(data, drafts) {
   data.categories = [...existing, ...added];
 }
 
+// 건너뛴 달은 지출 0원, 총 금액 미설정으로 마감한다. settled가 아니므로 다음 정산의 기준이 되지 않는다.
+function closeSkippedMonths(data, lastMonth, monthKey) {
+  if (lastMonth === null) return;
+  for (let key = addMonths(lastMonth, 1); key < monthKey; key = addMonths(key, 1)) {
+    data.months[key] ??= { baseAmount: 0, carryIn: 0, deduction: 0, total: null, allocations: {}, settled: false, skipped: true };
+  }
+}
+
 function addPiggyHistory(data, type, amount, memo) {
   data.piggy.balance += type === 'save' ? amount : -amount;
   data.piggy.history.push({ id: createId('piggy'), date: getToday(), type, amount, memo });
@@ -665,6 +673,7 @@ function applySettlement(data, monthKey, settlement) {
   if (piggyIn > 0) addPiggyHistory(data, 'save', piggyIn, `${label} 남은 돈 저축`);
   if (piggyOut > 0) addPiggyHistory(data, 'deficit', piggyOut, `${label} 초과분 차감`);
   if (kept > 0) data.unsettled.push({ month: lastMonth, amount: kept });
+  closeSkippedMonths(data, lastMonth, monthKey);
   data.months[monthKey] = { baseAmount, carryIn, deduction, total, allocations, settled: true };
 }
 
