@@ -242,7 +242,7 @@ test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
 
 test('calcSettlement 총 금액', { skip: !has('calcSettlement') }, () => {
   const calc = (base) => call(`calcSettlement({ mode: 'first', amount: 0 }, { base: ${q(base)} })`);
-  assert.deepEqual(calc('1,000,000'), { base: 1000000, carryIn: 0, deduction: 0, piggyIn: 0, total: 1000000, why: '', ok: true });
+  assert.deepEqual(calc('1,000,000'), { base: 1000000, carryIn: 0, deduction: 0, piggyIn: 0, piggyOut: 0, total: 1000000, why: '', ok: true });
   assert.equal(calc('').why, 'empty');
   assert.equal(calc('   ').why, 'empty');
   assert.equal(calc('1.5').why, 'base');
@@ -271,13 +271,41 @@ test('calcSettlement 남은 돈 처리', { skip: !has('calcSettlement') }, () =>
   assert.equal(call(`calcSettlement({ mode: 'leftover', amount: 100 }, { base: '0', save: '100' })`).why, 'total');
 });
 
+test('calcSettlement 초과 처리', { skip: !has('calcSettlement') }, () => {
+  const context = q({ mode: 'over', amount: 85000, piggyBalance: 150000 });
+  const calc = (inputs) => call(`calcSettlement(${context}, ${q({ base: '1,000,000', ...inputs })})`);
+  const next = calc({ option: 'next' });
+  assert.equal(next.deduction, 85000);
+  assert.equal(next.total, 915000);
+  assert.equal(next.piggyOut, 0);
+  const keep = calc({ option: 'keep' });
+  assert.equal(keep.deduction, 0);
+  assert.equal(keep.total, 1000000);
+  assert.equal(keep.piggyOut, 0);
+  const mix = calc({ option: 'mix', piggy: '30,000' });
+  assert.equal(mix.piggyOut, 30000);
+  assert.equal(mix.deduction, 55000);
+  assert.equal(mix.piggyOut + mix.deduction, 85000, '저금통 + 다음 달 차감 = 초과분');
+  assert.equal(mix.total, 945000);
+  assert.equal(calc({ option: 'mix', piggy: '' }).deduction, 85000, '빈칸은 저금통에서 0원');
+  assert.equal(calc({ option: 'mix', piggy: '85,000' }).ok, true);
+  assert.equal(calc({ option: 'mix', piggy: '85,001' }).why, 'cap', '초과분보다 많이 뺄 수 없음');
+  assert.equal(calc({ option: 'mix', piggy: '1.5' }).why, 'bad');
+  const poor = q({ mode: 'over', amount: 85000, piggyBalance: 50000 });
+  assert.equal(call(`calcSettlement(${poor}, { base: '1000', option: 'mix', piggy: '50001' })`).why, 'cap', '잔액보다 많이 뺄 수 없음');
+  assert.equal(call(`calcSettlement(${poor}, { base: '100000', option: 'mix', piggy: '50000' })`).ok, true);
+  assert.equal(calc({ base: '85000', option: 'next' }).why, 'total', '차감 후 0원이면 진행 불가');
+});
+
 test('settlementContext', { skip: !has('settlementContext') }, () => {
   const data = (spent) => q({
     months: { '2026-10': { total: 1000, settled: true } },
     expenses: [{ date: '2026-10-05', amount: spent }],
+    piggy: { balance: 500 },
   });
-  assert.equal(call(`settlementContext({ months: {}, expenses: [] }, '2026-11').mode`), 'first');
-  assert.deepEqual(call(`settlementContext(${data(700)}, '2026-11')`), { mode: 'leftover', lastMonth: '2026-10', amount: 300 });
+  assert.equal(call(`settlementContext({ months: {}, expenses: [], piggy: { balance: 0 } }, '2026-11').mode`), 'first');
+  assert.deepEqual(call(`settlementContext(${data(700)}, '2026-11')`), { mode: 'leftover', lastMonth: '2026-10', amount: 300, piggyBalance: 500 });
+  assert.deepEqual(call(`settlementContext(${data(1200)}, '2026-11')`), { mode: 'over', lastMonth: '2026-10', amount: 200, piggyBalance: 500 });
   assert.equal(call(`settlementContext(${data(1000)}, '2026-11').mode`), 'even');
   assert.equal(call(`settlementContext(${data(700)}, '2027-02').lastMonth`), '2026-10', '건너뛴 달은 마지막 정산 달 기준');
 });

@@ -200,6 +200,10 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .sum-line { display: flex; justify-content: space-between; align-items: baseline; }
 .result.yellow { background: var(--yellow); }
 .calc.last { border-bottom: none; }
+.over-head { display: flex; align-items: center; gap: 8px; }
+.mix-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.opt label.mix-label { font-size: 15px; }
+.mix-msg { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .confirm-btns { display: flex; gap: 6px; }
 .x:disabled { background: var(--off); border-color: var(--off-line); cursor: not-allowed; }
 .add-btn { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 18px; font-size: 17px; }
@@ -262,6 +266,22 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
               <div class="unit"><input class="field right" id="carry-amount" data-field="carry" inputmode="numeric" autocomplete="off"><span>원</span></div>
             </div>
           </div>
+          <div class="result bad" id="over-result" hidden><div class="top"><span class="over-head"><span class="chip" id="over-label"></span><span class="over-pill">초과</span></span><strong class="amt" id="over-amount"></strong></div></div>
+          <fieldset id="over-choice" hidden>
+            <legend id="over-title"></legend>
+            <div class="opt" id="opt-next"><label><input type="radio" name="over" value="next" data-field="option" checked>다음 달 총 금액에서 차감</label></div>
+            <div class="opt" id="opt-keep"><label><input type="radio" name="over" value="keep" data-field="option">그냥 두기</label></div>
+            <div class="opt" id="opt-mix">
+              <label><input type="radio" name="over" value="mix" data-field="option">저금통에서 차감하고 나머지는 다음 달에서 차감</label>
+              <div class="more" id="mix-more" hidden>
+                <div class="mix-row">
+                  <label class="mix-label" for="piggy-amount" id="piggy-label"></label>
+                  <div class="unit"><input class="field right" id="piggy-amount" data-field="piggy" inputmode="numeric" autocomplete="off" aria-describedby="mix-msg"><span>원</span></div>
+                </div>
+                <span class="mix-msg" id="mix-msg"></span>
+              </div>
+            </div>
+          </fieldset>
           <div class="block">
             <p class="sec-title">이번 달 총 금액</p>
             <div class="frow">
@@ -506,21 +526,40 @@ function computeTotal(baseAmount, carryIn, deduction) {
 // 마지막으로 정산된 달의 결과로 1단계 화면 종류를 정한다.
 function settlementContext(data, monthKey) {
   const lastMonth = lastSettledMonth(data, monthKey);
-  if (lastMonth === null) return { mode: 'first', lastMonth, amount: 0 };
+  const piggyBalance = data.piggy.balance;
+  if (lastMonth === null) return { mode: 'first', lastMonth, amount: 0, piggyBalance };
   const balance = monthBalance(data, lastMonth);
-  if (balance > 0) return { mode: 'leftover', lastMonth, amount: balance };
-  return { mode: 'even', lastMonth, amount: 0 };
+  if (balance > 0) return { mode: 'leftover', lastMonth, amount: balance, piggyBalance };
+  if (balance < 0) return { mode: 'over', lastMonth, amount: -balance, piggyBalance };
+  return { mode: 'even', lastMonth, amount: 0, piggyBalance };
+}
+
+// 저금통에서 뺄 수 있는 한도
+function piggyCap({ amount, piggyBalance }) {
+  return Math.min(piggyBalance, amount);
 }
 
 // 1단계 입력값으로 총 금액을 계산한다. why는 `다음`을 막는 이유이고 비어 있으면 통과다.
-function calcSettlement({ mode, amount }, { base: baseText, save: saveText, carry: carryText }) {
+function calcSettlement({ mode, amount, piggyBalance }, { base: baseText, save: saveText, carry: carryText, option, piggy: piggyText }) {
   const empty = String(baseText ?? '').trim() === '';
   const parsed = parseAmount(baseText);
   const base = parsed.ok ? parsed.value : null;
   let carryIn = 0;
   let piggyIn = 0;
-  const deduction = 0;
+  let piggyOut = 0;
+  let deduction = 0;
   let choiceWhy = '';
+  if (mode === 'over' && option === 'next') deduction = amount;
+  if (mode === 'over' && option === 'mix') {
+    const piggy = parseOptionalAmount(piggyText);
+    if (!piggy.ok) {
+      choiceWhy = 'bad';
+    } else {
+      piggyOut = piggy.value;
+      deduction = Math.max(amount - piggy.value, 0);
+      if (piggy.value > piggyCap({ amount, piggyBalance })) choiceWhy = 'cap';
+    }
+  }
   if (mode === 'leftover') {
     const save = parseOptionalAmount(saveText);
     const carry = parseOptionalAmount(carryText);
@@ -538,7 +577,7 @@ function calcSettlement({ mode, amount }, { base: baseText, save: saveText, carr
   else if (choiceWhy !== '') why = choiceWhy;
   else if (empty) why = 'empty';
   else if (total < 1) why = 'total';
-  return { base, carryIn, deduction, piggyIn, total, why, ok: why === '' };
+  return { base, carryIn, deduction, piggyIn, piggyOut, total, why, ok: why === '' };
 }
 
 // 분류 이름의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
@@ -589,6 +628,7 @@ function allocationSummary(categories, texts, total) {
 let settle = null;
 
 const ICON_X = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13" stroke-width="2.5" stroke-linecap="round" fill="none"></path></svg>';
+const ICON_NO = '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="#FFF1A8" stroke="#2B4A22" stroke-width="2"></circle><path d="M9 4.5 V10 M9 12.5 V13.5" stroke="#2B4A22" stroke-width="2.2" stroke-linecap="round" fill="none"></path></svg>';
 
 function escapeHtml(text) {
   const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -602,7 +642,7 @@ function currentCalc() {
 function settleErrorText({ why }) {
   if (why === 'base') return '기본 금액은 원 단위 숫자만 입력할 수 있어요.';
   if (why === 'total') return '이번 달 총 금액은 1원 이상이어야 해요.';
-  if (why === 'bad') return '금액은 원 단위 숫자만 입력할 수 있어요.';
+  if (why === 'bad' && settle.context.mode === 'leftover') return '금액은 원 단위 숫자만 입력할 수 있어요.';
   if (why === 'sum') return `저축과 이월을 더한 금액이 남은 ${formatWon(settle.context.amount)}과 같아야 해요.`;
   return '';
 }
@@ -614,15 +654,37 @@ function markInvalid(input, invalid) {
 
 // 지난달 결과 부분은 정산 창을 열 때 한 번만 채운다.
 function renderLastMonth() {
-  const { mode, lastMonth, amount } = settle.context;
+  const { mode, lastMonth, amount, piggyBalance } = settle.context;
   const leftover = mode === 'leftover';
+  const over = mode === 'over';
   document.getElementById('left-result').hidden = !leftover;
   document.getElementById('left-choice').hidden = !leftover;
+  document.getElementById('over-result').hidden = !over;
+  document.getElementById('over-choice').hidden = !over;
   if (leftover) {
     document.getElementById('left-label').textContent = `${Number(lastMonth.slice(5))}월 남은 돈`;
     document.getElementById('left-amount').textContent = `+${formatWon(amount)}`;
     document.getElementById('left-title').textContent = `남은 ${formatWon(amount)}을 어떻게 할까요?`;
   }
+  if (over) {
+    document.getElementById('over-label').textContent = `${Number(lastMonth.slice(5))}월 초과 지출`;
+    document.getElementById('over-amount').textContent = formatWon(-amount);
+    document.getElementById('over-title').textContent = `초과한 ${formatWon(amount)}을 어떻게 할까요?`;
+    document.getElementById('piggy-label').textContent = `저금통에서 뺄 금액 (잔액 ${formatWon(piggyBalance)})`;
+  }
+}
+
+function renderOverChoice({ why }) {
+  const { option, piggy } = settle.inputs;
+  for (const key of ['next', 'keep', 'mix']) {
+    document.getElementById(`opt-${key}`).classList.toggle('on', option === key);
+  }
+  document.getElementById('mix-more').hidden = option !== 'mix';
+  const message = document.getElementById('mix-msg');
+  if (why === 'bad') message.innerHTML = `${ICON_NO}금액은 원 단위 숫자만 입력해요`;
+  else if (why === 'cap') message.innerHTML = `${ICON_NO}${formatWon(piggyCap(settle.context))}까지만 뺄 수 있어요`;
+  else message.innerHTML = '';
+  markInvalid(document.getElementById('piggy-amount'), !parseOptionalAmount(piggy).ok || why === 'cap');
 }
 
 function renderTotal() {
@@ -638,6 +700,7 @@ function renderTotal() {
   markInvalid(base, calc.why === 'base');
   markInvalid(document.getElementById('save-amount'), !parseOptionalAmount(settle.inputs.save).ok);
   markInvalid(document.getElementById('carry-amount'), !parseOptionalAmount(settle.inputs.carry).ok);
+  if (settle.context.mode === 'over') renderOverChoice(calc);
   document.getElementById('settle-next').disabled = !calc.ok;
 }
 
@@ -754,7 +817,8 @@ function saveSettle() {
 function renderSettle() {
   const { monthKey, step } = settle;
   const title = document.getElementById('settle-title');
-  const titleText = step === 2 ? '분류별로 나눠 주세요' : '';
+  const firstTitle = settle.context.mode === 'over' ? '지난달 정리하고 이번 달 정해요' : '';
+  const titleText = step === 2 ? '분류별로 나눠 주세요' : firstTitle;
   document.getElementById('settle-step').textContent = `${step} / 2 단계`;
   document.getElementById('settle-label').textContent = `${Number(monthKey.slice(5))}월 첫 정산`;
   title.textContent = titleText;
@@ -767,7 +831,7 @@ function renderSettle() {
   if (step === 1) renderTotal();
   else renderAllocateStep();
   const inputs = document.querySelectorAll(`[data-step="${step}"] input`);
-  [...inputs].find((input) => input.offsetParent !== null)?.focus();
+  [...inputs].find((input) => input.offsetParent !== null && (input.type !== 'radio' || input.checked))?.focus();
 }
 
 function startSettle(monthKey) {
@@ -775,7 +839,7 @@ function startSettle(monthKey) {
     monthKey,
     step: 1,
     context: settlementContext(state, monthKey),
-    inputs: { base: '', save: '', carry: '' },
+    inputs: { base: '', save: '', carry: '', option: 'next', piggy: '' },
     categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
     allocations: {},
     confirmId: null,

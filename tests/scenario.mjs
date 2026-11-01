@@ -182,6 +182,44 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   const leftoverMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
   check('이월 저장', leftoverMonth.baseAmount === 1000000 && leftoverMonth.carryIn === 50000 && leftoverMonth.total === 1050000);
 
+  // 지난달 초과 처리
+  const pick = (value) => `document.querySelector('input[name="over"][value="${value}"]').click()`;
+  const optOn = (key) => `document.getElementById('opt-${key}').classList.contains('on')`;
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(seedLastMonth(1085000, 150000));
+  await reload();
+  check('초과: 결과 상자 표시', (await evaluate(text('over-label'))) === '10월 초과 지출' && (await evaluate(text('over-amount'))) === '-85,000원');
+  check('초과: 초과 라벨도 표시', (await evaluate(`document.querySelector('#over-result .over-pill').textContent`)) === '초과');
+  check('초과: 제목과 소제목', (await evaluate(text('settle-title'))) === '지난달 정리하고 이번 달 정해요' && (await evaluate(text('over-title'))) === '초과한 85,000원을 어떻게 할까요?');
+  check('초과: 남은 돈 화면은 숨김', await evaluate(isHidden('left-choice')));
+  check('초과: 첫 선택지가 기본', (await evaluate(optOn('next'))) && !(await evaluate(optOn('mix'))));
+  check('초과: 저금통 입력은 닫혀 있음', await evaluate(isHidden('mix-more')));
+  await evaluate(type('base-amount', '1,000,000'));
+  check('다음 달 차감: 총 금액 반영', (await evaluate(text('calc-deduction'))) === '- 85,000원' && (await evaluate(text('calc-total'))) === '915,000원');
+  await evaluate(pick('keep'));
+  check('그냥 두기: 총 금액 영향 없음', (await evaluate(optOn('keep'))) && (await evaluate(text('calc-deduction'))) === '- 0원' && (await evaluate(text('calc-total'))) === '1,000,000원');
+  await evaluate(pick('mix'));
+  check('세 번째 선택: 저금통 입력이 열림', !(await evaluate(isHidden('mix-more'))) && (await evaluate(text('piggy-label'))) === '저금통에서 뺄 금액 (잔액 150,000원)');
+  await evaluate(type('piggy-amount', '30,000'));
+  check('저금통 차감: 나머지만 다음 달에서 차감', (await evaluate(text('calc-deduction'))) === '- 55,000원' && (await evaluate(text('calc-total'))) === '945,000원');
+  console.log('shot', await shot('settle-over'));
+  await evaluate(type('piggy-amount', '90,000'));
+  check('한도 초과: 다음 비활성과 안내', (await evaluate(nextDisabled)) && (await evaluate(text('mix-msg'))) === '85,000원까지만 뺄 수 있어요', await evaluate(text('mix-msg')));
+  await evaluate(type('piggy-amount', 'abc'));
+  check('잘못된 금액: 다음 비활성과 안내', (await evaluate(nextDisabled)) && (await evaluate(text('mix-msg'))) === '금액은 원 단위 숫자만 입력해요');
+  await evaluate(type('piggy-amount', '30,000'));
+  check('고치면 안내가 사라짐', !(await evaluate(nextDisabled)) && (await evaluate(text('mix-msg'))) === '');
+  await evaluate(next);
+  check('2단계 총 금액에 차감 반영', (await evaluate(text('alloc-total'))) === '945,000원');
+  await evaluate(back);
+  check('돌아와도 선택 유지', (await evaluate(optOn('mix'))) && (await evaluate(`document.getElementById('piggy-amount').value`)) === '30,000');
+  await evaluate(next);
+  await evaluate(alloc(0, '945,000'));
+  await evaluate(next);
+  const overMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
+  check('차감 저장', overMonth.baseAmount === 1000000 && overMonth.deduction === 55000 && overMonth.total === 945000);
+
   // 탭을 열어둔 채 달이 바뀐 경우
   await size(1200, 800);
   await setToday('2026-11-20');
