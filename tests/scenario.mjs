@@ -457,5 +457,26 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`(() => { const d = JSON.parse(localStorage.getItem('living-budget')); d.piggy.balance = 150000; localStorage.setItem('living-budget', JSON.stringify(d)); })()`);
   await reload();
   check('저금통 잔액은 저장된 값', (await evaluate(text('piggy-balance'))) === '150,000원');
+
+  // 이번 달 지출만 합산, 지난달 기록 잠금
+  const remainBefore = await evaluate(text('month-remain'));
+  await evaluate(`(() => {
+    const d = JSON.parse(localStorage.getItem('living-budget'));
+    d.expenses.push({ id: 'last', date: '2026-10-20', categoryId: d.categories[0].id, amount: 999, memo: '지난달' });
+    localStorage.setItem('living-budget', JSON.stringify(d));
+  })()`);
+  await reload();
+  check('지난달 지출은 합산하지 않음', (await evaluate(text('month-remain'))) === remainBefore);
+  check('지난달 지출은 오늘 내역에 없음', !(await lines()).includes('지난달'));
+  check('지난달 지출은 삭제되지 않음', (await evaluate(`deleteExpense(state, 'last')`)) === false && (await expenses()).some((e) => e.id === 'last'));
+  check('지난달 날짜로 추가되지 않음', (await evaluate(`addExpense(state, { date: '2026-10-20', categoryId: 'x', amount: 1, memo: '' })`)) === false);
+  check('미래 날짜로 추가되지 않음', (await evaluate(`addExpense(state, { date: '2026-11-15', categoryId: 'x', amount: 1, memo: '' })`)) === false);
+
+  const countBefore = (await expenses()).length;
+  await evaluate(`getToday = () => '2026-12-01'`);
+  await evaluate(type('in-amt', '1,000'));
+  await evaluate(`document.querySelector('[data-act="add-expense"]').click()`);
+  check('열어둔 채 달이 바뀌면 입력 대신 정산 창', !(await evaluate(isHidden('overlay'))) && (await evaluate(appBlocked)));
+  check('달이 바뀐 뒤 입력은 기록되지 않음', (await expenses()).length === countBefore);
   await setToday(null);
 }

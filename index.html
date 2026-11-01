@@ -661,13 +661,23 @@ function expenseError(categoryId, amountText) {
   return parsed.value < 1 ? '1원 이상 입력해 주세요.' : '';
 }
 
-// 대시보드는 오늘 날짜로, 달력은 고른 날짜로 부른다.
+// 이번 달이면서 오늘까지인 날짜만 지출을 바꿀 수 있다.
+function canEditDate(dateKey) {
+  return dateKey <= getToday() && !isLockedDate(dateKey);
+}
+
+// 대시보드는 오늘 날짜로, 달력은 고른 날짜로 부른다. 바꿀 수 없는 날짜면 false를 돌려준다.
 function addExpense(data, { date, categoryId, amount, memo }) {
+  if (!canEditDate(date)) return false;
   data.expenses.push({ id: createId('exp'), date, categoryId, amount, memo });
+  return true;
 }
 
 function deleteExpense(data, id) {
+  const target = data.expenses.find((expense) => expense.id === id);
+  if (target === undefined || !canEditDate(target.date)) return false;
   data.expenses = data.expenses.filter((expense) => expense.id !== id);
+  return true;
 }
 
 function daySpent(data, dateKey) {
@@ -1031,9 +1041,16 @@ function submitExpense() {
   document.getElementById('in-amt').focus();
 }
 
+// 탭을 열어둔 채 달이 바뀌었으면 입력을 받지 않고 정산 창을 띄운다.
+function blockedByNewMonth() {
+  if (!needsSettlement(state, monthKeyOf(getToday()))) return false;
+  enterApp();
+  return true;
+}
+
 function handleDashboardClick(event) {
   const button = event.target.closest('[data-act]');
-  if (button === null) return;
+  if (button === null || blockedByNewMonth()) return;
   const { act, id } = button.dataset;
   if (act === 'add-expense') submitExpense();
   if (act === 'pick-category') {
@@ -1052,7 +1069,7 @@ function handleDashboardClick(event) {
 function handleDashboardKeydown(event) {
   if (event.key !== 'Enter' || !['in-amt', 'in-memo'].includes(event.target.id)) return;
   event.preventDefault();
-  submitExpense();
+  if (!blockedByNewMonth()) submitExpense();
 }
 
 // ---- 화면 ----

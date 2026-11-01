@@ -331,8 +331,34 @@ test('expenseError', { skip: !has('expenseError') }, () => {
   assert.equal(call(`expenseError('a', '0')`), '1원 이상 입력해 주세요.');
 });
 
+test('canEditDate는 이번 달 오늘까지만 허용한다', { skip: !has('canEditDate') }, () => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  for (const date of ['2026-11-01', '2026-11-13', '2026-11-14']) assert.equal(t.call(`canEditDate('${date}')`), true, date);
+  for (const date of ['2026-11-15', '2026-11-30', '2026-12-01', '2026-10-31', '2025-11-14']) assert.equal(t.call(`canEditDate('${date}')`), false, date);
+});
+
+test('바꿀 수 없는 날짜의 지출은 추가·삭제되지 않는다', { skip: !has('canEditDate') }, () => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  const expense = (date) => q({ date, categoryId: 'a', amount: 100, memo: '' });
+  const result = t.call(`(() => {
+    const d = { expenses: [{ id: 'old', date: '2026-10-31', categoryId: 'a', amount: 1 }] };
+    return {
+      lastMonth: addExpense(d, ${expense('2026-10-31')}),
+      future: addExpense(d, ${expense('2026-11-15')}),
+      removeOld: deleteExpense(d, 'old'),
+      removeNone: deleteExpense(d, 'nope'),
+      count: d.expenses.length,
+    };
+  })()`);
+  assert.deepEqual(result, { lastMonth: false, future: false, removeOld: false, removeNone: false, count: 1 });
+});
+
 test('지출 추가와 삭제', { skip: !has('addExpense') }, () => {
-  const d = call(`(() => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  const d = t.call(`(() => {
     const d = { expenses: [] };
     addExpense(d, { date: '2026-11-14', categoryId: 'a', amount: 9000, memo: '점심' });
     addExpense(d, { date: '2026-11-14', categoryId: 'b', amount: 1000, memo: '' });
