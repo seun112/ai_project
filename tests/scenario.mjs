@@ -1,88 +1,110 @@
-// 화면 골격과 저장 시나리오
+// 화면 틀, 정산 창, 저장 시나리오
 const visible = `[...document.querySelectorAll('[data-panel]')].filter((p) => !p.hidden).map((p) => p.dataset.panel).join()`;
 const overflow = `document.documentElement.scrollWidth > document.documentElement.clientWidth`;
 const isHidden = (id) => `document.getElementById('${id}').hidden`;
 const raw = `localStorage.getItem('living-budget')`;
 const setRaw = (value) => `localStorage.setItem('living-budget', ${JSON.stringify(value)})`;
+const type = (id, value) => `(() => { const el = document.getElementById('${id}'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+const text = (id) => `document.getElementById('${id}').textContent`;
+const next = `document.getElementById('settle-next').click()`;
+const back = `document.getElementById('settle-back').click()`;
+const nextDisabled = `document.getElementById('settle-next').disabled`;
+const nextLabel = text('settle-next');
+const onStep = (n) => `!document.querySelector('[data-step="${n}"]').hidden`;
+const alloc = (i, value) => `(() => { const el = document.querySelectorAll('[data-alloc]')[${i}]; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+const allocAttr = (i, name) => `document.querySelectorAll('[data-alloc]')[${i}].getAttribute('${name}')`;
+const enter = (selector) => `!document.querySelector('${selector}').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))`;
 
-// 이번 달을 정산 완료 상태로 만들어 마법사 없이 앱에 들어간다.
+// 이번 달을 정산 완료 상태로 만들어 정산 창 없이 앱에 들어간다.
 const seedSettled = `(() => {
   const data = JSON.parse(localStorage.getItem('living-budget'));
-  const allocations = Object.fromEntries(data.categories.map((c) => [c.id, 250000]));
+  const allocations = Object.fromEntries(data.categories.map((c) => [c.id, 200000]));
   data.months[monthKeyOf(getToday())] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations, settled: true };
   localStorage.setItem('living-budget', JSON.stringify(data));
 })()`;
 
 export default async function ({ evaluate, reload, size, shot, check, setToday }) {
-  // 첫 실행 흐름
-  check('첫 실행: 마법사 표시, 앱 숨김', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('app'))));
-  check('첫 실행: 2단계로 시작', /정산 1 \/ 2$/.test(await evaluate(`document.getElementById('wizard-progress').textContent`)));
-  check('첫 실행: 지난달 결과 없음', await evaluate(`document.querySelector('[data-step="result"]').hidden`));
-  check('첫 실행: 이전 버튼 없음', await evaluate(isHidden('wizard-back')));
-  console.log('shot', await shot('wizard-first'));
+  // 첫 접속: 앱 위에 정산 창이 뜬다
+  const appBlocked = `!document.getElementById('app').hidden && document.getElementById('app').inert`;
+  check('첫 실행: 정산 창 표시', !(await evaluate(isHidden('overlay'))));
+  check('첫 실행: 뒤의 앱은 조작 불가', await evaluate(appBlocked));
+  check('닫기 버튼 없음', (await evaluate(`[...document.querySelectorAll('#overlay button')].filter((b) => /닫기|취소/.test(b.textContent) && !b.hidden).length`)) === 0);
+  check('Esc로 닫히지 않음', (await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.getElementById('overlay').hidden`)) === false);
+  check('1 / 2 단계 표시', (await evaluate(text('settle-step'))) === '1 / 2 단계');
+  check('이번 달 첫 정산 표시', /^\d{1,2}월 첫 정산$/.test(await evaluate(text('settle-label'))));
+  check('1단계에 이전 버튼 없음', await evaluate(isHidden('settle-back')));
+  console.log('shot', await shot('settle-first'));
 
-  // 총 금액 단계
-  const type = (id, value) => `(() => { const el = document.getElementById('${id}'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
-  const text = (id) => `document.getElementById('${id}').textContent`;
-  const next = `document.getElementById('wizard-next').click()`;
-  const onTotal = `!document.querySelector('[data-step="total"]').hidden`;
+  // 총 금액
   check('금액 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'base-amount');
-  for (const [value, label] of [['', '빈 값'], ['1.5', '소수점'], ['-100', '음수'], ['abc', '문자'], ['0', '0원']]) {
+  check('빈칸: 문구 없이 다음 비활성', (await evaluate(nextDisabled)) && (await evaluate(isHidden('settle-error'))));
+  for (const [value, label, message] of [
+    ['1.5', '소수점', '기본 금액은 원 단위 숫자만 입력할 수 있어요.'],
+    ['-100', '음수', '기본 금액은 원 단위 숫자만 입력할 수 있어요.'],
+    ['abc', '문자', '기본 금액은 원 단위 숫자만 입력할 수 있어요.'],
+    ['0', '0원', '이번 달 총 금액은 1원 이상이어야 해요.'],
+  ]) {
     await evaluate(type('base-amount', value));
-    await evaluate(next);
-    check(`${label}: 다음 단계로 못 감`, await evaluate(onTotal));
-    check(`${label}: 오류 표시`, !(await evaluate(isHidden('base-error'))), await evaluate(text('base-error')));
-    check(`${label}: 잘못된 칸 표시`, (await evaluate(`document.getElementById('base-amount').getAttribute('aria-invalid')`)) === 'true');
+    check(`${label}: 다음 비활성`, await evaluate(nextDisabled));
+    check(`${label}: 안내 표시`, (await evaluate(text('settle-error'))) === message, await evaluate(text('settle-error')));
   }
-  console.log('shot', await shot('wizard-total-error'));
+  await evaluate(type('base-amount', 'abc'));
+  check('잘못된 칸 표시', (await evaluate(`document.getElementById('base-amount').getAttribute('aria-invalid')`)) === 'true');
+  console.log('shot', await shot('settle-total-error'));
   await evaluate(type('base-amount', '1,000,000'));
-  check('입력하면 오류가 사라짐', await evaluate(isHidden('base-error')));
-  check('입력하면 총 금액이 바로 갱신', (await evaluate(text('total-amount'))) === '1,000,000원');
-  check('계산식 표시', (await evaluate(text('total-base'))) === '1,000,000원' && (await evaluate(text('total-carry'))) === '+0원' && (await evaluate(text('total-deduction'))) === '−0원');
-  console.log('shot', await shot('wizard-total'));
+  check('입력하면 안내가 사라짐', await evaluate(isHidden('settle-error')));
+  check('입력하면 총 금액이 바로 갱신', (await evaluate(text('calc-total'))) === '1,000,000원');
+  check('이월·차감 표시', (await evaluate(text('calc-carry'))) === '+ 0원' && (await evaluate(text('calc-deduction'))) === '- 0원');
+  console.log('shot', await shot('settle-total'));
   await evaluate(next);
-  check('올바른 금액이면 다음 단계로 이동', !(await evaluate(onTotal)));
-  await evaluate(`document.getElementById('wizard-back').click()`);
+  check('올바른 금액이면 2단계로 이동', await evaluate(onStep(2)));
+  check('2 / 2 단계 표시', (await evaluate(text('settle-step'))) === '2 / 2 단계');
+  check('2단계 제목', (await evaluate(text('settle-title'))) === '분류별로 나눠 주세요');
+  await evaluate(back);
   check('돌아와도 입력값 유지', (await evaluate(`document.getElementById('base-amount').value`)) === '1,000,000');
 
   // 분류별 배분 단계
-  const alloc = (i, value) => `(() => { const el = document.querySelectorAll('[data-alloc]')[${i}]; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
-  const allocAttr = (i, name) => `document.querySelectorAll('[data-alloc]')[${i}].getAttribute('${name}')`;
   await evaluate(next);
   check('배분: 분류 5개 입력칸', (await evaluate(`document.querySelectorAll('[data-alloc]').length`)) === 5);
-  check('배분: 첫 칸에 포커스', (await evaluate(`document.activeElement === document.querySelector('[data-alloc]')`)));
+  check('배분: 첫 칸에 포커스', await evaluate(`document.activeElement === document.querySelector('[data-alloc]')`));
   check('배분: 총 금액 표시', (await evaluate(text('alloc-total'))) === '1,000,000원');
   check('배분: 처음에는 전액 미배분', (await evaluate(text('alloc-sum'))) === '0원' && (await evaluate(text('alloc-left'))) === '1,000,000원');
   await evaluate(alloc(0, '400,000'));
   check('입력하면 합계와 미배분이 바로 바뀜', (await evaluate(text('alloc-sum'))) === '400,000원' && (await evaluate(text('alloc-left'))) === '600,000원');
   await evaluate(alloc(1, '700000'));
-  check('초과 배분은 -와 빨간색', (await evaluate(text('alloc-left'))) === '-100,000원' && (await evaluate(`document.getElementById('alloc-left').classList.contains('over')`)));
+  check('초과 배분은 -와 빨간색', (await evaluate(text('alloc-left'))) === '-100,000원' && (await evaluate(`document.getElementById('alloc-left').classList.contains('neg-text')`)));
   console.log('shot', await shot('allocate-over'));
   await evaluate(alloc(1, '1.5'));
   check('잘못된 금액: 칸 표시와 안내', (await evaluate(allocAttr(1, 'aria-invalid'))) === 'true' && !(await evaluate(isHidden('alloc-hint'))), await evaluate(text('alloc-hint')));
   await evaluate(alloc(1, ''));
   check('빈칸은 0원: 오류 없음', (await evaluate(allocAttr(1, 'aria-invalid'))) === null && (await evaluate(isHidden('alloc-hint'))) && (await evaluate(text('alloc-sum'))) === '400,000원');
-  await evaluate(`document.getElementById('wizard-back').click()`);
+  await evaluate(back);
   await evaluate(next);
   check('이전으로 갔다 와도 배분 입력 유지', (await evaluate(`document.querySelectorAll('[data-alloc]')[0].value`)) === '400,000');
-  await evaluate(`document.getElementById('wizard-back').click()`);
+  await evaluate(back);
 
   await evaluate(seedSettled);
   await reload();
-  check('정산 완료 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
+  check('정산 완료 후 창 없이 앱 표시', (await evaluate(isHidden('overlay'))) && !(await evaluate(`document.getElementById('app').inert`)));
   check('처음 화면은 대시보드', (await evaluate(visible)) === 'dashboard');
-  check('이번 달 표시', /^\d{4}년 \d{1,2}월$/.test(await evaluate(`document.getElementById('month-label').textContent`)));
-  for (const name of ['calendar', 'weekly', 'piggy', 'settings', 'dashboard']) {
+  check('탭 오른쪽에 오늘 날짜', /^\d{4}년 \d{1,2}월 \d{1,2}일 \([월화수목금토일]\)$/.test(await evaluate(text('today-label'))));
+  check('탭은 대시보드, 달력, 설정 세 개', (await evaluate(`[...document.querySelectorAll('.tab')].map((t) => t.textContent).join()`)) === '대시보드,달력,설정');
+  for (const name of ['calendar', 'settings', 'dashboard']) {
     await evaluate(`document.querySelector('[data-view="${name}"]').click()`);
     check(`${name} 탭 전환`, (await evaluate(visible)) === name);
+    check(`${name} 탭 현재 표시`, (await evaluate(`document.querySelector('[aria-current="page"]').dataset.view`)) === name);
   }
 
-  // 첫 실행 저장과 새로고침 유지
+  // 디자인 토큰
+  check('바탕색은 목업과 같음', (await evaluate(`getComputedStyle(document.body).backgroundColor`)) === 'rgb(217, 240, 188)');
+  check('글꼴 지정', (await evaluate(`getComputedStyle(document.body).fontFamily`)).includes('Gowun Dodum'));
+
+  // 저장과 새로고침
   const first = await evaluate(raw);
   check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 5);
   await reload();
   check('새로고침 후 분류 id 유지', (await evaluate(raw)) === first);
-  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; ${setRaw('')}; localStorage.setItem('living-budget', JSON.stringify(d));`);
+  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; localStorage.setItem('living-budget', JSON.stringify(d));`);
   await reload();
   check('저장한 값이 새로고침 후 유지', (await evaluate(`state.piggy.balance`)) === 1234);
 
@@ -90,14 +112,13 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('데스크톱 가로 넘침 없음', !(await evaluate(overflow)));
   await size(400, 800);
   check('400px 가로 넘침 없음', !(await evaluate(overflow)));
-  check('400px 내비가 하단 고정', (await evaluate(`getComputedStyle(document.querySelector('.nav')).position`)) === 'fixed');
-  console.log('shot', await shot('mobile'));
+  console.log('shot', await shot('narrow'));
 
   // 손상 데이터
   for (const [label, value] of [['깨진 JSON', '{broken'], ['다른 버전', JSON.stringify({ version: 99 })]]) {
     await evaluate(setRaw(value));
     await reload();
-    check(`${label}: 복구 화면 표시`, !(await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))));
+    check(`${label}: 복구 화면 표시`, !(await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
     check(`${label}: 원본 유지`, (await evaluate(raw)) === value);
   }
   console.log('shot', await shot('recovery'));
@@ -113,12 +134,12 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`document.getElementById('reset-start').click()`);
   console.log('shot', await shot('recovery-confirm'));
   await evaluate(`document.getElementById('reset-run').click()`);
-  check('초기화 후 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))));
+  check('초기화 후 정산 창 표시', !(await evaluate(isHidden('overlay'))) && (await evaluate(isHidden('recovery'))));
   const after = JSON.parse(await evaluate(raw));
   check('초기화 후 빈 데이터 저장', after.version === 1 && after.categories.length === 5 && after.piggy.balance === 0);
   await reload();
   await reload();
-  check('초기화 후 새로고침해도 마법사 표시', !(await evaluate(isHidden('wizard'))));
+  check('초기화 후 새로고침해도 정산 창 표시', !(await evaluate(isHidden('overlay'))));
 
   // 저장 실패 안내
   await evaluate(`Storage.prototype.setItem = () => { throw new Error('quota'); }; saveState();`);
@@ -128,66 +149,49 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(`saveState();`);
   check('저장 성공하면 안내 사라짐', await evaluate(isHidden('save-error')));
 
-  // 다음 달 접속
-  await size(1200, 800);
-  await setToday('2026-11-15');
-  await reload();
-  await evaluate(seedSettled);
-  await setToday('2026-12-02');
-  await reload();
-  const progress = () => evaluate(`document.getElementById('wizard-progress').textContent`);
-  check('다음 달: 3단계로 시작', (await progress()) === '2026년 12월 정산 1 / 3', await progress());
-  check('다음 달: 지난달 결과 표시', (await evaluate(`document.getElementById('result-title').textContent`)) === '2026년 11월 결과');
-  check('다음 달: 남은 금액 부호 표시', (await evaluate(`document.getElementById('result-balance').textContent`)) === '+1,000,000원');
-  console.log('shot', await shot('wizard-result'));
-  await evaluate(`document.getElementById('wizard-next').click()`);
-  check('다음 단계로 이동', (await progress()) === '2026년 12월 정산 2 / 3');
-  await evaluate(`document.getElementById('base-amount').value = '500000'`);
-  check('이전 버튼 표시', !(await evaluate(isHidden('wizard-back'))));
-  await evaluate(`document.getElementById('wizard-back').click()`);
-  check('이전 단계로 이동', (await progress()) === '2026년 12월 정산 1 / 3');
-
   // 탭을 열어둔 채 달이 바뀐 경우
+  await size(1200, 800);
   await setToday('2026-11-20');
   await reload();
-  check('이번 달이 정산되어 있으면 앱 표시', !(await evaluate(isHidden('app'))));
+  await evaluate(seedSettled);
+  await reload();
+  check('이번 달이 정산되어 있으면 창 없음', await evaluate(isHidden('overlay')));
   await evaluate(`getToday = () => '2026-12-01'; document.dispatchEvent(new Event('visibilitychange'));`);
-  check('탭 복귀 시 달이 바뀌었으면 마법사 표시', !(await evaluate(isHidden('wizard'))) && (await evaluate(isHidden('app'))));
+  check('탭 복귀 시 달이 바뀌었으면 정산 창 표시', !(await evaluate(isHidden('overlay'))) && (await evaluate(appBlocked)));
+  check('바뀐 달로 정산 표시', (await evaluate(text('settle-label'))) === '12월 첫 정산');
   await setToday(null);
 
   // 합계 검증과 저장
   await evaluate(`localStorage.clear()`);
   await reload();
-  const nextBtn = `document.getElementById('wizard-next')`;
   await evaluate(type('base-amount', '1,000,000'));
-  check('총 금액 단계 버튼은 다음', (await evaluate(`${nextBtn}.textContent`)) === '다음');
+  check('1단계 버튼은 다음', (await evaluate(nextLabel)) === '다음');
   await evaluate(next);
-  check('배분 단계 버튼은 저장하고 시작', (await evaluate(`${nextBtn}.textContent`)) === '저장하고 시작');
-  check('아직 나누지 않았으면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
-  await evaluate(`document.getElementById('wizard-back').click()`);
-  check('이전으로 돌아가면 다음 버튼 활성', (await evaluate(`${nextBtn}.textContent`)) === '다음' && !(await evaluate(`${nextBtn}.disabled`)));
+  check('배분 단계 버튼은 저장하고 시작', (await evaluate(nextLabel)) === '저장하고 시작');
+  check('아직 나누지 않았으면 저장 비활성', await evaluate(nextDisabled));
+  await evaluate(back);
+  check('이전으로 돌아가면 다음 버튼 활성', (await evaluate(nextLabel)) === '다음' && !(await evaluate(nextDisabled)));
   await evaluate(next);
   await evaluate(alloc(0, '600,000'));
-  check('합계가 모자라면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  check('합계가 모자라면 저장 비활성', await evaluate(nextDisabled));
   await evaluate(alloc(1, '500,000'));
-  check('합계가 넘치면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
+  check('합계가 넘치면 저장 비활성', await evaluate(nextDisabled));
   await evaluate(alloc(1, '400,000'));
   await evaluate(alloc(2, 'abc'));
-  check('합이 맞아도 잘못된 칸이 있으면 저장 비활성', await evaluate(`${nextBtn}.disabled`));
-  await evaluate(`document.getElementById('wizard-form').requestSubmit()`);
+  check('합이 맞아도 잘못된 칸이 있으면 저장 비활성', await evaluate(nextDisabled));
+  await evaluate(`document.getElementById('settle-form').requestSubmit()`);
   check('저장 차단: 제출해도 기록되지 않음', Object.keys(JSON.parse(await evaluate(raw)).months).length === 0);
   await evaluate(alloc(2, ''));
-  check('합계가 맞으면 저장 활성', !(await evaluate(`${nextBtn}.disabled`)));
-  const enter = (selector) => `!document.querySelector('${selector}').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))`;
+  check('합계가 맞으면 저장 활성', !(await evaluate(nextDisabled)));
   check('금액 칸 Enter는 저장으로 이어지지 않음', await evaluate(enter('[data-alloc]')));
   check('삭제 버튼 Enter는 막지 않음', !(await evaluate(enter('[data-act="del-ask"]'))));
   await evaluate(next);
-  check('저장 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
+  check('저장 후 창이 닫힘', (await evaluate(isHidden('overlay'))) && !(await evaluate(`document.getElementById('app').inert`)));
   const saved = Object.values(JSON.parse(await evaluate(raw)).months);
   check('정산 기록 저장', saved.length === 1 && saved[0].settled === true && saved[0].total === 1000000 && saved[0].baseAmount === 1000000);
   check('배분 저장, 빈칸은 0원', Object.values(saved[0].allocations).join() === '600000,400000,0,0,0', Object.values(saved[0].allocations).join());
   await reload();
-  check('새로고침해도 정산 창이 다시 뜨지 않음', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
+  check('새로고침해도 정산 창이 다시 뜨지 않음', await evaluate(isHidden('overlay')));
 
   // 분류 추가와 삭제
   await setToday('2026-11-15');
@@ -227,7 +231,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
 
   await evaluate(alloc(0, '100,000'));
   await evaluate(`document.querySelector('[aria-label="식비 분류 삭제"]').click()`);
-  check('삭제 전 확인 표시', /^식비 분류를 삭제할까요\? 이번 달부터 목록에서 빠져요\.$/.test(await evaluate(`document.querySelector('.confirm span').textContent`)));
+  check('삭제 전 확인 표시', (await evaluate(`document.querySelector('.confirm span').textContent`)) === '식비 분류를 삭제할까요? 이번 달부터 목록에서 빠져요.');
   check('확인 줄의 취소에 포커스', (await evaluate(`document.activeElement.dataset.act`)) === 'del-no');
   console.log('shot', await shot('allocate-confirm'));
   await evaluate(`document.querySelector('[data-act="del-no"]').click()`);
@@ -248,7 +252,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('한 개 남으면 삭제 버튼 비활성', (await rows()) === 1 && (await evaluate(`document.querySelector('[data-act="del-ask"]').disabled`)));
   await evaluate(alloc(0, '100,000'));
   await evaluate(next);
-  check('분류를 바꿔도 저장 후 앱 표시', !(await evaluate(isHidden('app'))));
+  check('분류를 바꿔도 저장 후 창이 닫힘', await evaluate(isHidden('overlay')));
   const cats = JSON.parse(await evaluate(raw)).categories;
   check('지출 있는 분류는 숨김, 없는 분류는 삭제', cats.map((c) => `${c.name}:${c.hidden}`).join() === '식비:true,취미:false', cats.map((c) => `${c.name}:${c.hidden}`).join());
   const month = JSON.parse(await evaluate(raw)).months['2026-11'];
@@ -256,7 +260,6 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
 
   await setToday('2026-12-02');
   await reload();
-  await evaluate(next);
   await evaluate(type('base-amount', '100,000'));
   await evaluate(next);
   check('다음 달 정산에 숨긴 분류가 나오지 않음', (await names()) === '취미', await names());

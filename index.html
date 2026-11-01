@@ -4,392 +4,285 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>생활비 통장</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap" rel="stylesheet">
 <style>
-  :root {
-    color-scheme: light;
-    --paper: #E9F0EC;
-    --surface: #F8FBF9;
-    --ink: #14322B;
-    --ink-soft: #56706A;
-    --pine: #1E6B57;
-    --seal: #C4213A;
-    --line: #C9D8D1;
-    --nav-width: 13rem;
-    --row: 2.75rem;
-    --font: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
-  }
+:root {
+  --bg: #D9F0BC; --stripe: rgba(255,255,255,0.5); --paper: #FFFBE3; --ink: #2B4A22; --soft: #4F6B3F;
+  --dot: #A8CB8B; --dash: #7FB069; --field: #FFFFFF; --accent: #8CCB4F; --accent-ink: #1F3D17;
+  --yellow: #FFF1A8; --mint: #EAF6D6; --tab: #BFE08F; --tab-line: #7FA566; --seal: #C4213A;
+  --track: #FFFBE3; --veil: rgba(43,74,34,0.6); --off: #E3E8D5; --off-ink: #60705A; --off-line: #A9B79A;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  background-color: var(--bg);
+  background-image: linear-gradient(90deg, var(--stripe) 50%, transparent 50%), linear-gradient(var(--stripe) 50%, transparent 50%);
+  background-size: 44px 44px;
+  color: var(--ink);
+  font-family: 'Gowun Dodum', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  font-size: 17px; line-height: 1.6;
+}
+button, input { font-family: inherit; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.jua { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; }
+.tnum { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1128px; margin: 0 auto; padding: 40px 24px 64px; }
 
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
+/* 탭 */
+.tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; padding-left: 28px; }
+.tab { padding: 6px 18px 4px; border: 3px solid var(--tab-line); border-bottom: none; border-radius: 14px 14px 0 0; background: var(--tab); color: var(--ink); font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 16px; cursor: pointer; }
+.tab[aria-current="page"] { padding: 8px 22px 6px; border-color: var(--ink); background: var(--paper); font-size: 19px; cursor: default; }
+.date { margin-left: auto; padding-bottom: 6px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 17px; }
+.date small { font-family: 'Gowun Dodum', sans-serif; color: var(--soft); font-size: 13px; }
 
-  body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font: 400 1rem/1.6 var(--font);
-    font-variant-numeric: tabular-nums;
-    word-break: keep-all;
-  }
+/* 노트 */
+.book { margin-top: -3px; padding: 14px; border: 4px solid var(--ink); border-radius: 28px; background: var(--paper); }
+.inner { border: 2px dashed var(--dash); border-radius: 18px; padding: 28px; display: flex; flex-wrap: wrap; gap: 32px; }
+.col { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.chip { display: inline-block; padding: 2px 12px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 14px; }
+.head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 10px; border-bottom: 2px dotted var(--dot); }
+.big { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-variant-numeric: tabular-nums; }
+.remain { padding: 18px 20px 20px; border: 2px solid var(--ink); border-radius: 18px; background: var(--mint); display: flex; flex-direction: column; gap: 10px; }
+.remain .chip { align-self: flex-start; }
+.remain .big { font-size: 56px; line-height: 1.2; }
+.remain .big.neg { color: var(--seal); }
+.meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 15px; color: var(--soft); }
+.bar { height: 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--track); overflow: hidden; }
+.bar.lg { height: 16px; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.bar.over { border-color: var(--seal); }
+.bar.over > i { background: var(--seal); }
+.sub { font-size: 14px; color: var(--soft); }
+.over-pill { padding: 0 10px; border: 2px solid var(--seal); border-radius: 999px; color: var(--seal); font-family: 'Gowun Dodum', sans-serif; font-size: 13px; font-weight: 700; }
+.neg-text { color: var(--seal); }
 
-  button { font: inherit; color: inherit; cursor: pointer; }
-  :focus-visible { outline: 3px solid var(--pine); outline-offset: 2px; }
+.entry { padding: 16px; border: 2px solid var(--ink); border-radius: 18px; background: var(--yellow); display: flex; flex-direction: column; gap: 12px; }
+.entry h2, .sec-title { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 20px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { min-height: 40px; padding: 0 16px; border: 2px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 16px; cursor: pointer; }
+.pill[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.field { height: 46px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 14px; background: var(--field); color: var(--ink); font-size: 18px; min-width: 0; }
+.field.right { text-align: right; font-variant-numeric: tabular-nums; }
+.field[aria-invalid="true"] { border-color: var(--seal); }
+.err { margin: 0; color: var(--seal); font-size: 14px; font-weight: 700; }
+.btn { min-height: 46px; padding: 0 24px; border: 3px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 18px; cursor: pointer; }
+.btn.go { background: var(--accent); color: var(--accent-ink); }
+.btn.small { min-height: 36px; padding: 0 14px; border-width: 2px; font-family: 'Gowun Dodum', sans-serif; font-size: 15px; }
+.btn:disabled { background: var(--off); color: var(--off-ink); border-color: var(--off-line); cursor: not-allowed; }
 
-  .app {
-    display: grid;
-    grid-template-columns: var(--nav-width) minmax(0, 1fr);
-    min-height: 100vh;
-  }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.line { display: flex; align-items: center; gap: 12px; min-height: 56px; border-bottom: 2px dotted var(--dot); }
+.line:last-child { border-bottom: none; }
+.grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tag { padding: 1px 10px; border: 2px solid var(--ink); border-radius: 999px; font-size: 14px; white-space: nowrap; }
+.empty { padding: 14px 0; color: var(--soft); }
+.x { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 2px solid var(--ink); border-radius: 50%; background: var(--paper); cursor: pointer; flex: none; }
+.x svg { stroke: var(--ink); }
+.cat-row { padding: 10px 0 12px; border-bottom: 2px dotted var(--dot); display: flex; flex-direction: column; gap: 6px; }
+.cat-row:last-child { border-bottom: none; }
+.cat-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.cat-name { display: flex; align-items: center; gap: 8px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 18px; }
+.notice { margin: 0; padding: 10px 14px; border: 2px dashed var(--dash); border-radius: 14px; background: var(--field); font-size: 15px; }
+.placeholder { flex: 1 1 100%; padding: 40px 0; text-align: center; color: var(--soft); }
+.piggy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border: 2px dashed var(--dash); border-radius: 16px; background: var(--field); }
 
-  .nav {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    height: 100vh;
-    padding: 1.5rem 0.75rem;
-    background: var(--ink);
-    color: var(--surface);
-  }
-  .nav:focus-visible, .nav button:focus-visible { outline-color: var(--surface); }
+/* 달력 */
+.cal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.cal-nav { display: flex; align-items: center; gap: 10px; }
+.cal-nav h2 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 26px; min-width: 7.5em; text-align: center; }
+.nbtn { width: 44px; height: 44px; padding: 0; border: 2px solid var(--ink); border-radius: 50%; background: var(--paper); color: var(--ink); font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 20px; cursor: pointer; }
+.nbtn:disabled { background: var(--off); color: var(--off-ink); border-color: var(--off-line); cursor: not-allowed; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.wd { text-align: center; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 15px; color: var(--soft); }
+.day { min-height: 82px; padding: 6px 7px; border: 2px solid var(--dot); border-radius: 12px; background: var(--field); color: var(--ink); display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; text-align: left; cursor: pointer; font-size: 15px; }
+.day .n { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 16px; line-height: 1.3; }
+.day .n small { font-family: 'Gowun Dodum', sans-serif; font-size: 11px; }
+.day .a { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; min-height: 1.3em; white-space: nowrap; }
+.day.has { background: var(--mint); border-color: var(--ink); }
+.day.today { border-width: 3px; border-color: var(--ink); }
+.day[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.cal-wrap { flex: 1 1 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr); gap: 28px; align-items: start; }
+.cal-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cal-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.day .a small { font-size: 11px; }
+.day .a.zero { color: var(--soft); opacity: 0.7; }
+.day[aria-pressed="true"] .a.zero { color: var(--paper); }
+@media (max-width: 720px) { .cal-wrap { grid-template-columns: minmax(0, 1fr); } }
+.lock { display: inline-block; padding: 1px 10px; border: 2px dashed var(--dash); border-radius: 999px; font-size: 13px; color: var(--soft); }
 
-  .brand {
-    margin: 0 0 1.25rem;
-    padding: 0 0.75rem;
-    font-size: 1.125rem;
-    font-weight: 700;
-  }
+/* 로그인 / 회원가입 */
+.auth { min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 40px 24px; }
+.auth-col { width: 100%; max-width: 480px; }
+.auth-tabs { display: flex; align-items: flex-end; gap: 6px; padding-left: 28px; }
+.auth-card .inner { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 20px; padding: 34px 32px 30px; }
+.auth-head { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.auth-head h1 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 34px; line-height: 1.25; }
+.afield { display: flex; flex-direction: column; gap: 6px; }
+.afield label { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 18px; }
+.afield .field { width: 100%; height: 50px; padding: 0 16px; }
+.afield .err { font-size: 14px; }
+.btn.wide { min-height: 52px; width: 100%; font-size: 20px; }
+.auth-foot { margin: 0; padding-top: 14px; border-top: 2px dotted var(--dot); text-align: center; font-size: 15px; }
+.auth-foot button { padding: 0; border: 0; background: none; color: var(--ink); font-size: 15px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 
-  .nav-item {
-    padding: 0.625rem 0.75rem;
-    border: 0;
-    border-radius: 4px;
-    background: none;
-    text-align: left;
-  }
-  .nav-item:hover { background: rgb(248 251 249 / 0.1); }
-  .nav-item[aria-current="page"] {
-    background: var(--surface);
-    color: var(--ink);
-    font-weight: 700;
-  }
+/* 정산 창 */
+#overlay { position: fixed; inset: 0; z-index: 10; background: var(--veil); display: flex; justify-content: center; align-items: flex-start; overflow: auto;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.dialog { width: 100%; max-width: 640px; padding: 12px; border: 4px solid var(--ink); border-radius: 28px; background: var(--paper); }
+.dialog-in { border: 2px dashed var(--dash); border-radius: 18px; padding: 22px 26px 24px; display: flex; flex-direction: column; gap: 16px; }
+.dlg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.dlg-head .left { display: flex; align-items: center; gap: 10px; }
+.result { padding: 12px 16px; border: 2px solid var(--ink); border-radius: 16px; background: var(--mint); display: flex; flex-direction: column; gap: 2px; }
+.result.bad { border-color: var(--seal); background: var(--field); }
+.result .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.result .amt { font-weight: 400; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 30px; font-variant-numeric: tabular-nums; }
+.result.bad .amt { color: var(--seal); }
+.block { display: flex; flex-direction: column; }
+.block .sec-title { margin-bottom: 4px; }
+.frow { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 56px; border-bottom: 2px dotted var(--dot); }
+.frow:last-child { border-bottom: none; }
+.unit { display: flex; align-items: center; gap: 8px; }
+.frow .field { width: 150px; }
+.opt .unit .field { width: 150px; }
+.calc { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; min-height: 52px; padding-top: 8px; border-bottom: 2px dotted var(--dot); }
+.total-box { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 16px; padding: 10px 16px 12px; border-top: 4px double var(--ink); background: var(--yellow); border-radius: 0 0 14px 14px; }
+.total-box.mint { background: var(--mint); }
+.total-box .big { font-size: 34px; line-height: 1.3; }
+.check { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 2px dashed var(--dash); border-radius: 14px; background: var(--field); }
+.check .msg { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.opt { padding: 10px 14px; border: 2px solid var(--ink); border-radius: 16px; background: var(--field); }
+.opt.on { border-width: 3px; background: var(--yellow); }
+.opt label { display: flex; align-items: center; gap: 10px; min-height: 36px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 18px; cursor: pointer; }
+.opt input[type="radio"] { width: 20px; height: 20px; margin: 0; accent-color: var(--ink); }
+.opt .more { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 2px 30px; }
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 19px; }
+.confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 2px solid var(--seal); border-radius: 14px; background: var(--field); }
+.add-cat { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 2px dashed var(--dash); border-radius: 16px; background: var(--field); }
+.add-cat .field { flex: 1 1 200px; background: var(--paper); }
+.actions { display: flex; justify-content: flex-end; gap: 10px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 560px) {
+  .inner { padding: 18px 14px; }
+  .remain .big { font-size: 40px; }
+  .dialog-in { padding: 18px 14px 20px; }
+  .frow .field { width: 120px; }
+  .tab { padding: 6px 12px 4px; }
+  .day { min-height: 58px; padding: 4px 4px; }
+  .day .a { font-size: 11px; }
+  .day .a small { display: none; }
+  .cal-nav h2 { font-size: 21px; min-width: 6.5em; }
+}
 
-  .main {
-    width: 100%;
-    max-width: 44rem;
-    margin-inline: auto;
-    padding: 2.5rem 1.5rem;
-  }
+/* 목업에 없는 화면: 저장 실패 안내와 손상 데이터 복구 */
+.save-error { margin: 0; padding: 12px 16px; background: var(--seal); color: var(--paper); text-align: center; }
+.recovery { width: calc(100% - 32px); max-width: 560px; margin: 64px auto; word-break: keep-all; }
+.recovery .inner { display: block; }
+.recovery h1 { margin: 0 0 12px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 28px; line-height: 1.3; }
+.recovery p { margin: 0 0 20px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
-  .month {
-    margin: 0;
-    color: var(--ink-soft);
-  }
-
-  .view h1 {
-    margin: 0 0 1.5rem;
-    font-size: 1.5rem;
-    line-height: 1.3;
-  }
-
-  /* 통장 속지처럼 일정한 간격의 줄 */
-  .ledger {
-    min-height: calc(var(--row) * 6 + 1px);
-    padding: 0 1rem;
-    border-top: 2px solid var(--ink);
-    background:
-      repeating-linear-gradient(
-        to bottom,
-        transparent 0 calc(var(--row) - 1px),
-        var(--line) calc(var(--row) - 1px) var(--row)
-      )
-      var(--surface);
-  }
-
-  .empty {
-    margin: 0;
-    color: var(--ink-soft);
-    line-height: var(--row);
-  }
-
-  .wizard {
-    max-width: 32rem;
-    margin-inline: auto;
-    padding: 3rem 1rem 6rem;
-  }
-  .wizard h1 { margin: 0 0 1.5rem; font-size: 1.5rem; line-height: 1.3; }
-
-  .ledger-fit { min-height: 0; }
-
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    min-height: var(--row);
-  }
-
-  /* 합계는 회계 장부처럼 이중선 아래에 적는다 */
-  .sum {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0 1rem;
-    padding: 0.75rem 1rem;
-    border-top: 3px double var(--ink);
-    font-weight: 700;
-  }
-  .sum strong { font-size: 2rem; line-height: 1.3; }
-  .over { color: var(--seal); }
-
-  /* 정산 2단계. 구조와 문구는 목업을 따르고, 색과 글꼴은 T3에서 바꾼다. */
-  .result {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--ink);
-    border-radius: 4px;
-  }
-  .result .amt { font-size: 1.5rem; }
-  .frow {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    min-height: 3.5rem;
-    border-bottom: 1px dotted var(--line);
-  }
-  .frow label { font-weight: 700; overflow-wrap: anywhere; }
-  .unit { display: flex; align-items: center; gap: 0.5rem; }
-  .field {
-    width: 9rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--ink-soft);
-    border-radius: 4px;
-    background: var(--surface);
-    color: var(--ink);
-    font: inherit;
-  }
-  .field.right { text-align: right; font-variant-numeric: tabular-nums; }
-  .field[aria-invalid="true"] { border: 2px solid var(--seal); }
-  .calc {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-top: 1rem;
-    color: var(--ink-soft);
-  }
-  .x {
-    display: inline-flex;
-    flex: none;
-    justify-content: center;
-    align-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    padding: 0;
-    border: 1px solid var(--ink);
-    border-radius: 50%;
-    background: var(--surface);
-  }
-  .x svg { stroke: var(--ink); }
-  .x:disabled { border-color: var(--line); background: var(--line); cursor: not-allowed; }
-  .confirm {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0.5rem 0;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--seal);
-    border-radius: 4px;
-  }
-  .add-cat {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 1rem;
-    padding: 0.625rem 0.75rem;
-    border: 1px dashed var(--ink-soft);
-    border-radius: 4px;
-  }
-  .add-cat .field { flex: 1 1 12rem; width: auto; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-  .field-label { display: block; margin-bottom: 0.25rem; font-weight: 700; }
-
-  .amount-input {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--ink-soft);
-    border-radius: 4px;
-    background: var(--surface);
-    color: var(--ink);
-    font: inherit;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-  .amount-input[aria-invalid="true"] { border: 2px solid var(--ink); }
-
-  .field-error { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 700; }
-
-  .total-rows { margin-top: 1.5rem; }
-
-  .wizard-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
-  }
-
-  .notice {
-    margin: 0;
-    padding: 0.75rem 1rem;
-    background: var(--ink);
-    color: var(--surface);
-    text-align: center;
-  }
-
-  .recovery {
-    max-width: 32rem;
-    margin-inline: auto;
-    padding: 4rem 1rem;
-  }
-  .recovery h1 { margin: 0 0 0.75rem; font-size: 1.5rem; line-height: 1.3; }
-  .recovery p { margin: 0 0 1.25rem; }
-
-  .button {
-    padding: 0.625rem 1rem;
-    border: 1px solid var(--ink);
-    border-radius: 4px;
-    background: var(--surface);
-  }
-  .button-solid { background: var(--ink); color: var(--surface); }
-  .button:disabled { border-color: var(--line); background: var(--line); color: var(--ink-soft); cursor: not-allowed; }
-  .button-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-
-  @media (max-width: 40rem) {
-    .app { display: block; }
-
-    .nav {
-      position: fixed;
-      inset: auto 0 0;
-      z-index: 1;
-      flex-direction: row;
-      gap: 0;
-      height: auto;
-      padding: 0.25rem;
-      padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px));
-    }
-    .brand { display: none; }
-    .nav-item { flex: 1 1 0; padding: 0.5rem 0.25rem; font-size: 0.875rem; text-align: center; }
-
-    .main { padding: 1.5rem 1rem 6rem; }
-  }
+/* 목업의 인라인 스타일을 옮긴 것 */
+.panel { flex: 1 1 100%; min-width: 0; }
+.dlg-title { display: flex; align-items: center; gap: 12px; }
+.dlg-title h2 { margin: 0; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 30px; line-height: 1.25; }
+.step { display: flex; flex-direction: column; gap: 16px; }
+.alloc-label { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 20px; }
+.total-label { font-family: 'Jua', 'Gowun Dodum', sans-serif; font-size: 18px; }
+.sum-line { display: flex; justify-content: space-between; align-items: baseline; }
+.result.yellow { background: var(--yellow); }
+.calc.last { border-bottom: none; }
+.confirm-btns { display: flex; gap: 6px; }
+.x:disabled { background: var(--off); border-color: var(--off-line); cursor: not-allowed; }
+.add-btn { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 18px; font-size: 17px; }
+#settle-error { margin-top: 6px; }
 </style>
 </head>
 <body>
-  <p class="notice" id="save-error" role="alert" hidden>저장하지 못했습니다. 브라우저 저장 공간을 확인한 뒤 다시 시도하세요.</p>
+  <p class="save-error" id="save-error" role="alert" hidden>저장하지 못했습니다. 브라우저 저장 공간을 확인한 뒤 다시 시도하세요.</p>
 
-  <section class="recovery" id="recovery" hidden>
-    <h1>저장된 데이터를 읽을 수 없습니다</h1>
-    <p>데이터가 손상되었거나 지원하지 않는 형식입니다. 저장된 원본은 지우지 않았습니다.</p>
-    <button class="button" id="reset-start" type="button">데이터 초기화</button>
-    <div id="reset-confirm" role="alert" hidden>
-      <p>모든 데이터가 삭제되고 되돌릴 수 없습니다.</p>
-      <div class="button-row">
-        <button class="button button-solid" id="reset-run" type="button">모두 삭제하고 새로 시작</button>
-        <button class="button" id="reset-cancel" type="button">취소</button>
+  <section class="recovery book" id="recovery" hidden>
+    <div class="inner">
+      <h1>저장된 데이터를 읽을 수 없습니다</h1>
+      <p>데이터가 손상되었거나 지원하지 않는 형식입니다. 저장된 원본은 지우지 않았습니다.</p>
+      <button class="btn" id="reset-start" type="button">데이터 초기화</button>
+      <div id="reset-confirm" role="alert" hidden>
+        <p>모든 데이터가 삭제되고 되돌릴 수 없습니다.</p>
+        <div class="btn-row">
+          <button class="btn go" id="reset-run" type="button">모두 삭제하고 새로 시작</button>
+          <button class="btn" id="reset-cancel" type="button">취소</button>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="wizard" id="wizard" hidden>
-    <form id="wizard-form" novalidate>
-      <p class="month" id="wizard-progress"></p>
-
-      <div data-step="result" hidden>
-        <h1 id="result-title"></h1>
-        <div class="ledger ledger-fit">
-          <div class="row"><span>총 금액</span><span id="result-total"></span></div>
-          <div class="row"><span>전체 지출</span><span id="result-spent"></span></div>
-        </div>
-        <p class="sum"><span>남은 금액</span><strong id="result-balance"></strong></p>
-      </div>
-
-      <div data-step="total" hidden>
-        <h1>이번 달 총 금액</h1>
-        <label class="field-label" for="base-amount">기본 금액</label>
-        <input class="amount-input" id="base-amount" inputmode="numeric" autocomplete="off" aria-describedby="base-error">
-        <p class="field-error" id="base-error" hidden></p>
-        <div class="ledger ledger-fit total-rows">
-          <div class="row"><span>기본 금액</span><span id="total-base"></span></div>
-          <div class="row"><span>이월</span><span id="total-carry"></span></div>
-          <div class="row"><span>차감</span><span id="total-deduction"></span></div>
-        </div>
-        <p class="sum"><span>총 금액</span><strong id="total-amount"></strong></p>
-      </div>
-
-      <div data-step="allocate" hidden>
-        <h1>분류별로 나눠 주세요</h1>
-        <div class="result"><span>이번 달 총 금액</span><strong class="amt" id="alloc-total"></strong></div>
-        <div id="alloc-rows"></div>
-        <div class="add-cat">
-          <label class="sr" for="new-cat">새 분류 이름</label>
-          <input class="field" id="new-cat" maxlength="12" placeholder="새 분류 이름 (예: 반려동물)" autocomplete="off" aria-describedby="cat-error">
-          <button class="button" type="button" data-act="add-cat">+ 분류 추가</button>
-        </div>
-        <p class="field-error over" id="cat-error" role="alert" hidden></p>
-        <div class="calc"><span>배분 합계</span><span id="alloc-sum"></span></div>
-        <p class="sum"><span>아직 나누지 않은 금액</span><strong id="alloc-left"></strong></p>
-        <p class="field-error over" id="alloc-hint" role="status" hidden></p>
-      </div>
-
-      <div class="wizard-actions">
-        <button class="button" id="wizard-back" type="button">이전</button>
-        <button class="button button-solid" id="wizard-next" type="submit">다음</button>
-      </div>
-    </form>
-  </section>
-
-  <div class="app" id="app" hidden>
-    <nav class="nav" aria-label="메뉴">
-      <p class="brand">생활비 통장</p>
-      <button class="nav-item" type="button" data-view="dashboard" aria-current="page">대시보드</button>
-      <button class="nav-item" type="button" data-view="calendar">달력</button>
-      <button class="nav-item" type="button" data-view="weekly">주간</button>
-      <button class="nav-item" type="button" data-view="piggy">저금통</button>
-      <button class="nav-item" type="button" data-view="settings">설정</button>
+  <div class="wrap" id="app" hidden>
+    <nav class="tabs" aria-label="메뉴">
+      <button class="tab" type="button" data-view="dashboard" aria-current="page">대시보드</button>
+      <button class="tab" type="button" data-view="calendar">달력</button>
+      <button class="tab" type="button" data-view="settings">설정</button>
+      <span class="date" id="today-label"></span>
     </nav>
-
-    <main class="main">
-      <p class="month" id="month-label"></p>
-      <section class="view" data-panel="dashboard">
-        <h1>대시보드</h1>
-        <div class="ledger"><p class="empty">이번 달 예산을 정하면 남은 돈이 여기에 표시됩니다.</p></div>
-      </section>
-      <section class="view" data-panel="calendar" hidden>
-        <h1>달력</h1>
-        <div class="ledger"><p class="empty">날짜별 지출이 여기에 표시됩니다.</p></div>
-      </section>
-      <section class="view" data-panel="weekly" hidden>
-        <h1>주간</h1>
-        <div class="ledger"><p class="empty">월요일부터 일요일까지 주별 지출이 여기에 표시됩니다.</p></div>
-      </section>
-      <section class="view" data-panel="piggy" hidden>
-        <h1>저금통</h1>
-        <div class="ledger"><p class="empty">저축하고 사용한 내역이 여기에 표시됩니다.</p></div>
-      </section>
-      <section class="view" data-panel="settings" hidden>
-        <h1>설정</h1>
-        <div class="ledger"><p class="empty">분류를 여기에서 관리합니다.</p></div>
-      </section>
+    <main class="book">
+      <div class="inner">
+        <section class="panel" data-panel="dashboard"><p class="placeholder">오늘 지출과 이번 달 남은 돈이 여기에 표시됩니다.</p></section>
+        <section class="panel" data-panel="calendar" hidden><p class="placeholder">날짜별 지출이 여기에 표시됩니다.</p></section>
+        <section class="panel" data-panel="settings" hidden><p class="placeholder">이번 달 금액을 여기에서 고칩니다.</p></section>
+      </div>
     </main>
+  </div>
+
+  <div id="overlay" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="매달 첫 정산">
+      <form class="dialog-in" id="settle-form" novalidate>
+        <div class="dlg-head"><span class="chip" id="settle-step"></span><span class="sub" id="settle-label"></span></div>
+        <div class="dlg-title">
+          <svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="27" r="17" fill="#E8503F" stroke="#2B4A22" stroke-width="3"></circle><path d="M24 12 L19 5 L24 8 L29 5 Z M14 14 L24 11 L34 14 L24 15 Z" fill="#6FB34A" stroke="#2B4A22" stroke-width="2" stroke-linejoin="round"></path><circle cx="18" cy="27" r="2" fill="#2B4A22"></circle><circle cx="30" cy="27" r="2" fill="#2B4A22"></circle><circle cx="14" cy="32" r="2.5" fill="#F7A19A"></circle><circle cx="34" cy="32" r="2.5" fill="#F7A19A"></circle></svg>
+          <h2 id="settle-title" hidden></h2>
+        </div>
+
+        <div class="step" data-step="1">
+          <div class="block">
+            <p class="sec-title">이번 달 총 금액</p>
+            <div class="frow">
+              <label for="base-amount">기본 금액</label>
+              <div class="unit"><input class="field right" id="base-amount" data-field="base" inputmode="numeric" autocomplete="off" aria-describedby="settle-error"><span>원</span></div>
+            </div>
+            <div class="calc"><span>지난달에서 이월</span><span class="tnum" id="calc-carry"></span></div>
+            <div class="calc last"><span>지난달 초과분 차감</span><span class="tnum" id="calc-deduction"></span></div>
+            <div class="total-box"><span class="total-label">이번 달 총 금액</span><strong class="big" id="calc-total"></strong></div>
+            <p class="err" id="settle-error" role="alert" hidden></p>
+          </div>
+        </div>
+
+        <div class="step" data-step="2" hidden>
+          <div class="result yellow"><div class="top"><span class="chip">이번 달 총 금액</span><strong class="amt" id="alloc-total"></strong></div></div>
+          <div class="block" id="alloc-rows"></div>
+          <div class="add-cat">
+            <label class="sr" for="new-cat">새 분류 이름</label>
+            <input class="field" id="new-cat" maxlength="12" placeholder="새 분류 이름 (예: 반려동물)" autocomplete="off" aria-describedby="cat-error">
+            <button class="btn add-btn" type="button" data-act="add-cat"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1 V13 M1 7 H13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"></path></svg>분류 추가</button>
+          </div>
+          <p class="err" id="cat-error" role="alert" hidden></p>
+          <div class="sum-line sub"><span>배분 합계</span><span class="tnum" id="alloc-sum"></span></div>
+          <div class="total-box mint"><span class="total-label">아직 나누지 않은 금액</span><strong class="big" id="alloc-left"></strong></div>
+          <p class="sub" id="alloc-hint" role="status" hidden></p>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="settle-back" type="button">이전</button>
+          <button class="btn go" id="settle-next" type="submit">다음</button>
+        </div>
+      </form>
+    </div>
   </div>
 
 <script>
@@ -401,6 +294,7 @@ const STORAGE_KEY = 'living-budget';
 const DATA_VERSION = 1;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
 const CATEGORY_NAME_MAX = 10;
+const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 // ---- 금액 유틸 ----
 
@@ -485,6 +379,11 @@ function weeksOfMonth(monthKey) {
 
 function isLockedDate(dateKey) {
   return monthKeyOf(dateKey) < monthKeyOf(getToday());
+}
+
+function formatDate(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return `${year}년 ${month}월 ${day}일 (${WEEKDAYS[weekdayIndex(dateKey)]})`;
 }
 
 function formatMonth(monthKey) {
@@ -592,10 +491,19 @@ function computeTotal(baseAmount, carryIn, deduction) {
   return baseAmount + carryIn - deduction;
 }
 
-// 앞선 정산이 없으면 첫 실행이므로 지난달 결과 단계를 뺀다.
-function wizardSteps(data, monthKey) {
-  const steps = ['total', 'allocate'];
-  return lastSettledMonth(data, monthKey) === null ? steps : ['result', ...steps];
+// 1단계 입력값으로 총 금액을 계산한다. why는 `다음`을 막는 이유이고 비어 있으면 통과다.
+function calcSettlement({ base: baseText }) {
+  const empty = String(baseText ?? '').trim() === '';
+  const parsed = parseAmount(baseText);
+  const base = parsed.ok ? parsed.value : null;
+  const carryIn = 0;
+  const deduction = 0;
+  const total = computeTotal(base ?? 0, carryIn, deduction);
+  let why = '';
+  if (empty) why = 'empty';
+  else if (base === null) why = 'base';
+  else if (total < 1) why = 'total';
+  return { base, carryIn, deduction, total, why, ok: why === '' };
 }
 
 // 분류 이름의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
@@ -640,77 +548,60 @@ function allocationSummary(categories, texts, total) {
   return { sum, bad, left, ok: !bad && left === 0 };
 }
 
-// ---- 정산 마법사 ----
+// ---- 정산 창 ----
 
-// 입력 중인 값은 저장하지 않는다. 끝나기 전에 새로고침하면 마법사가 다시 시작된다.
-let wizard = null;
+// 입력 중인 값은 저장하지 않는다. 끝나기 전에 새로고침하면 창이 처음부터 다시 뜬다.
+let settle = null;
+
+const ICON_X = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13" stroke-width="2.5" stroke-linecap="round" fill="none"></path></svg>';
 
 function escapeHtml(text) {
   const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   return String(text).replace(/[&<>"']/g, (char) => entities[char]);
 }
 
-function renderResultStep() {
-  const lastMonth = lastSettledMonth(state, wizard.monthKey);
-  if (lastMonth === null) return;
-  const balance = monthBalance(state, lastMonth);
-  const balanceEl = document.getElementById('result-balance');
-  document.getElementById('result-title').textContent = `${formatMonth(lastMonth)} 결과`;
-  document.getElementById('result-total').textContent = formatWon(state.months[lastMonth].total);
-  document.getElementById('result-spent').textContent = formatWon(monthSpent(state, lastMonth));
-  balanceEl.textContent = formatSigned(balance);
-  balanceEl.classList.toggle('over', balance < 0);
+function currentCalc() {
+  return calcSettlement(settle.inputs);
 }
 
-function showFieldError(input, errorEl, message) {
-  if (message === '') input.removeAttribute('aria-invalid');
-  else input.setAttribute('aria-invalid', 'true');
-  errorEl.textContent = message;
-  errorEl.hidden = message === '';
+function settleErrorText({ why }) {
+  if (why === 'base') return '기본 금액은 원 단위 숫자만 입력할 수 있어요.';
+  if (why === 'total') return '이번 달 총 금액은 1원 이상이어야 해요.';
+  return '';
 }
 
-function wizardBaseAmount() {
-  const parsed = parseAmount(document.getElementById('base-amount').value);
-  return parsed.ok ? parsed.value : 0;
+function renderTotal() {
+  const calc = currentCalc();
+  const error = document.getElementById('settle-error');
+  const base = document.getElementById('base-amount');
+  const message = settleErrorText(calc);
+  document.getElementById('calc-carry').textContent = `+ ${formatWon(calc.carryIn)}`;
+  document.getElementById('calc-deduction').textContent = `- ${formatWon(calc.deduction)}`;
+  document.getElementById('calc-total').textContent = formatWon(calc.total);
+  error.textContent = message;
+  error.hidden = message === '';
+  if (calc.why === 'base') base.setAttribute('aria-invalid', 'true');
+  else base.removeAttribute('aria-invalid');
+  document.getElementById('settle-next').disabled = !calc.ok;
 }
-
-function wizardTotal() {
-  return computeTotal(wizardBaseAmount(), wizard.carryIn, wizard.deduction);
-}
-
-function renderTotalStep() {
-  document.getElementById('total-base').textContent = formatWon(wizardBaseAmount());
-  document.getElementById('total-carry').textContent = `+${formatWon(wizard.carryIn)}`;
-  document.getElementById('total-deduction').textContent = `−${formatWon(wizard.deduction)}`;
-  document.getElementById('total-amount').textContent = formatWon(wizardTotal());
-}
-
-// 총 금액 단계의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
-function totalStepError() {
-  const parsed = parseAmount(document.getElementById('base-amount').value);
-  if (!parsed.ok) return parsed.error;
-  return wizardTotal() < 1 ? '총 금액은 1원 이상이어야 합니다.' : '';
-}
-
-const ICON_X = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13" stroke-width="2.5" stroke-linecap="round" fill="none"></path></svg>';
 
 function allocationRow({ id, name }) {
   const safeId = escapeHtml(id);
   const safeName = escapeHtml(name);
-  if (wizard.confirmId === id) {
+  if (settle.confirmId === id) {
     return `<div class="confirm" role="alert">
       <span>${safeName} 분류를 삭제할까요? 이번 달부터 목록에서 빠져요.</span>
-      <span class="button-row">
-        <button class="button" type="button" data-act="del-yes" data-id="${safeId}">삭제</button>
-        <button class="button" type="button" data-act="del-no" data-id="${safeId}">취소</button>
+      <span class="confirm-btns">
+        <button class="btn small" type="button" data-act="del-yes" data-id="${safeId}">삭제</button>
+        <button class="btn small" type="button" data-act="del-no" data-id="${safeId}">취소</button>
       </span>
     </div>`;
   }
-  const lastOne = wizard.categories.length <= 1 ? ' disabled' : '';
+  const lastOne = settle.categories.length <= 1 ? ' disabled' : '';
   return `<div class="frow">
-    <label for="alloc-${safeId}">${safeName}</label>
+    <label class="alloc-label" for="alloc-${safeId}">${safeName}</label>
     <div class="unit">
-      <input class="field right" id="alloc-${safeId}" data-alloc="${safeId}" inputmode="numeric" autocomplete="off" placeholder="0" value="${escapeHtml(wizard.allocations[id] ?? '')}"><span>원</span>
+      <input class="field right" id="alloc-${safeId}" data-alloc="${safeId}" inputmode="numeric" autocomplete="off" placeholder="0" value="${escapeHtml(settle.allocations[id] ?? '')}"><span>원</span>
       <button class="x" type="button" data-act="del-ask" data-id="${safeId}" aria-label="${safeName} 분류 삭제"${lastOne}>${ICON_X}</button>
     </div>
   </div>`;
@@ -718,15 +609,15 @@ function allocationRow({ id, name }) {
 
 // 입력칸을 다시 그리지 않으므로 입력 중에 불러도 포커스가 유지된다.
 function renderAllocateSummary() {
-  const { sum, bad, left, ok } = allocationSummary(wizard.categories, wizard.allocations, wizardTotal());
+  const { sum, bad, left, ok } = allocationSummary(settle.categories, settle.allocations, currentCalc().total);
   const leftEl = document.getElementById('alloc-left');
   const hint = document.getElementById('alloc-hint');
   document.getElementById('alloc-sum').textContent = formatWon(sum);
   leftEl.textContent = formatWon(left);
-  leftEl.classList.toggle('over', left < 0);
+  leftEl.classList.toggle('neg-text', left < 0);
   hint.textContent = bad ? '금액은 원 단위 숫자만 입력할 수 있어요.' : '';
   hint.hidden = !bad;
-  document.getElementById('wizard-next').disabled = !ok;
+  document.getElementById('settle-next').disabled = !ok;
   document.querySelectorAll('[data-alloc]').forEach((input) => {
     const invalid = !parseOptionalAmount(input.value).ok;
     if (invalid) input.setAttribute('aria-invalid', 'true');
@@ -735,15 +626,15 @@ function renderAllocateSummary() {
 }
 
 function renderAllocateStep() {
-  document.getElementById('alloc-total').textContent = formatWon(wizardTotal());
-  document.getElementById('alloc-rows').innerHTML = wizard.categories.map(allocationRow).join('');
+  document.getElementById('alloc-total').textContent = formatWon(currentCalc().total);
+  document.getElementById('alloc-rows').innerHTML = settle.categories.map(allocationRow).join('');
   renderAllocateSummary();
 }
 
 function handleAllocationInput(event) {
   const id = event.target.dataset.alloc;
   if (id === undefined) return;
-  wizard.allocations[id] = event.target.value;
+  settle.allocations[id] = event.target.value;
   renderAllocateSummary();
 }
 
@@ -755,10 +646,10 @@ function showCategoryError(message) {
 
 function addCategory() {
   const input = document.getElementById('new-cat');
-  const message = categoryNameError(input.value, wizard.categories);
+  const message = categoryNameError(input.value, settle.categories);
   showCategoryError(message);
   if (message === '') {
-    wizard.categories.push({ id: createId('cat'), name: input.value.trim() });
+    settle.categories.push({ id: createId('cat'), name: input.value.trim() });
     input.value = '';
     renderAllocateStep();
   }
@@ -766,10 +657,10 @@ function addCategory() {
 }
 
 function removeCategory(id) {
-  if (wizard.categories.length <= 1) return;
-  wizard.categories = wizard.categories.filter((category) => category.id !== id);
-  delete wizard.allocations[id];
-  wizard.confirmId = null;
+  if (settle.categories.length <= 1) return;
+  settle.categories = settle.categories.filter((category) => category.id !== id);
+  delete settle.allocations[id];
+  settle.confirmId = null;
   showCategoryError('');
   renderAllocateStep();
   document.getElementById('new-cat').focus();
@@ -782,89 +673,79 @@ function handleCategoryClick(event) {
   if (act === 'add-cat') addCategory();
   if (act === 'del-yes') removeCategory(id);
   if (act === 'del-ask' || act === 'del-no') {
-    wizard.confirmId = act === 'del-ask' ? id : null;
+    settle.confirmId = act === 'del-ask' ? id : null;
     renderAllocateStep();
     const next = act === 'del-ask' ? '[data-act="del-no"]' : `[data-act="del-ask"][data-id="${CSS.escape(id)}"]`;
     document.querySelector(next).focus();
   }
 }
 
-function saveWizard() {
-  const { monthKey, categories, allocations, carryIn, deduction } = wizard;
-  const total = wizardTotal();
+function saveSettle() {
+  const { monthKey, categories, allocations } = settle;
+  const { base, carryIn, deduction, total } = currentCalc();
   if (!allocationSummary(categories, allocations, total).ok) return;
   applySettlement(state, monthKey, {
-    baseAmount: wizardBaseAmount(),
+    baseAmount: base,
     carryIn,
     deduction,
     total,
     allocations: Object.fromEntries(categories.map(({ id }) => [id, parseOptionalAmount(allocations[id]).value])),
     categories,
   });
-  wizard = null;
+  settle = null;
   saveState();
   enterApp();
 }
 
-function renderWizardStep() {
-  const { monthKey, steps, index } = wizard;
-  const step = steps[index];
-  document.getElementById('wizard-progress').textContent = `${formatMonth(monthKey)} 정산 ${index + 1} / ${steps.length}`;
+function renderSettle() {
+  const { monthKey, step } = settle;
+  const title = document.getElementById('settle-title');
+  const titleText = step === 2 ? '분류별로 나눠 주세요' : '';
+  document.getElementById('settle-step').textContent = `${step} / 2 단계`;
+  document.getElementById('settle-label').textContent = `${Number(monthKey.slice(5))}월 첫 정산`;
+  title.textContent = titleText;
+  title.hidden = titleText === '';
   document.querySelectorAll('[data-step]').forEach((panel) => {
-    panel.hidden = panel.dataset.step !== step;
+    panel.hidden = Number(panel.dataset.step) !== step;
   });
-  document.getElementById('wizard-back').hidden = index === 0;
-  const next = document.getElementById('wizard-next');
-  next.textContent = step === 'allocate' ? '저장하고 시작' : '다음';
-  next.disabled = false;
-  if (step === 'total') document.getElementById('base-amount').focus();
-  if (step === 'allocate') {
-    renderAllocateStep();
-    document.querySelector('[data-alloc]')?.focus();
-  }
+  document.getElementById('settle-back').hidden = step === 1;
+  document.getElementById('settle-next').textContent = step === 2 ? '저장하고 시작' : '다음';
+  if (step === 1) renderTotal();
+  else renderAllocateStep();
+  const panel = document.querySelector(`[data-step="${step}"]`);
+  panel.querySelector('input')?.focus();
 }
 
-function startWizard(monthKey) {
-  // 이월과 차감은 T3의 1단계 화면에서 채운다.
-  wizard = {
+function startSettle(monthKey) {
+  settle = {
     monthKey,
-    steps: wizardSteps(state, monthKey),
-    index: 0,
-    carryIn: 0,
-    deduction: 0,
+    step: 1,
+    inputs: { base: '' },
     categories: state.categories.filter((category) => !category.hidden).map(({ id, name }) => ({ id, name })),
     allocations: {},
     confirmId: null,
   };
-  document.getElementById('wizard-form').reset();
+  document.getElementById('settle-form').reset();
   showCategoryError('');
-  showFieldError(document.getElementById('base-amount'), document.getElementById('base-error'), '');
-  renderResultStep();
-  renderTotalStep();
-  renderWizardStep();
+  renderSettle();
 }
 
-function moveWizard(delta) {
-  wizard.index = Math.min(wizard.index + delta, wizard.steps.length - 1);
-  renderWizardStep();
+function moveSettle(step) {
+  settle.step = step;
+  renderSettle();
 }
 
-function handleWizardSubmit(event) {
+function handleSettleInput(event) {
+  const { field } = event.target.dataset;
+  if (field === undefined) return;
+  settle.inputs[field] = event.target.value;
+  renderTotal();
+}
+
+function handleSettleSubmit(event) {
   event.preventDefault();
-  if (wizard.steps[wizard.index] === 'allocate') {
-    saveWizard();
-    return;
-  }
-  if (wizard.steps[wizard.index] === 'total') {
-    const message = totalStepError();
-    const input = document.getElementById('base-amount');
-    showFieldError(input, document.getElementById('base-error'), message);
-    if (message !== '') {
-      input.focus();
-      return;
-    }
-  }
-  moveWizard(1);
+  if (settle.step === 2) saveSettle();
+  else if (currentCalc().ok) moveSettle(2);
 }
 
 // ---- 화면 ----
@@ -888,14 +769,17 @@ function setResetConfirm(open) {
   document.getElementById('reset-confirm').hidden = !open;
 }
 
-// 이번 달이 정산되지 않았으면 앱 대신 마법사를 보여준다.
+// 이번 달이 정산되지 않았으면 앱 위에 정산 창을 띄운다. 끝내기 전에는 뒤의 앱을 쓸 수 없다.
 function enterApp() {
-  const monthKey = monthKeyOf(getToday());
+  const today = getToday();
+  const monthKey = monthKeyOf(today);
   const settling = needsSettlement(state, monthKey);
-  document.getElementById('month-label').textContent = formatMonth(monthKey);
-  document.getElementById('wizard').hidden = !settling;
-  document.getElementById('app').hidden = settling;
-  if (settling && wizard?.monthKey !== monthKey) startWizard(monthKey);
+  const app = document.getElementById('app');
+  document.getElementById('today-label').textContent = formatDate(today);
+  document.getElementById('overlay').hidden = !settling;
+  app.hidden = false;
+  app.inert = settling;
+  if (settling && settle?.monthKey !== monthKey) startSettle(monthKey);
 }
 
 function resetData() {
@@ -912,12 +796,13 @@ function init() {
   document.getElementById('reset-start').addEventListener('click', () => setResetConfirm(true));
   document.getElementById('reset-cancel').addEventListener('click', () => setResetConfirm(false));
   document.getElementById('reset-run').addEventListener('click', resetData);
-  document.getElementById('wizard-form').addEventListener('submit', handleWizardSubmit);
-  document.getElementById('wizard-back').addEventListener('click', () => moveWizard(-1));
+  document.getElementById('settle-form').addEventListener('submit', handleSettleSubmit);
+  document.getElementById('settle-back').addEventListener('click', () => moveSettle(1));
+  document.getElementById('settle-form').addEventListener('input', handleSettleInput);
   document.getElementById('alloc-rows').addEventListener('input', handleAllocationInput);
-  document.querySelector('[data-step="allocate"]').addEventListener('click', handleCategoryClick);
+  document.querySelector('[data-step="2"]').addEventListener('click', handleCategoryClick);
   // 금액을 넣다가 Enter로 바로 저장되지 않게 한다. 저장은 버튼으로만 한다.
-  document.querySelector('[data-step="allocate"]').addEventListener('keydown', (event) => {
+  document.querySelector('[data-step="2"]').addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     if (event.target.id === 'new-cat') {
       event.preventDefault();
@@ -925,10 +810,6 @@ function init() {
     } else if (event.target.matches('[data-alloc]')) {
       event.preventDefault();
     }
-  });
-  document.getElementById('base-amount').addEventListener('input', (event) => {
-    showFieldError(event.target, document.getElementById('base-error'), '');
-    renderTotalStep();
   });
   document.addEventListener('visibilitychange', () => {
     if (state !== null && document.visibilityState === 'visible') enterApp();

@@ -238,9 +238,23 @@ test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
 
   assert.equal(is(`monthSpent(DATA, '2026-10')`), 1200);
   assert.equal(is(`monthBalance(DATA, '2026-10')`), -200);
+});
 
-  assert.deepEqual(is(`wizardSteps(DATA, '2026-08')`), ['total', 'allocate']);
-  assert.deepEqual(is(`wizardSteps(DATA, '2026-11')`), ['result', 'total', 'allocate']);
+test('calcSettlement 총 금액', { skip: !has('calcSettlement') }, () => {
+  const calc = (base) => call(`calcSettlement({ base: ${q(base)} })`);
+  assert.deepEqual(calc('1,000,000'), { base: 1000000, carryIn: 0, deduction: 0, total: 1000000, why: '', ok: true });
+  assert.equal(calc('').why, 'empty');
+  assert.equal(calc('   ').why, 'empty');
+  assert.equal(calc('1.5').why, 'base');
+  assert.equal(calc('abc').why, 'base');
+  assert.equal(calc('0').why, 'total');
+  assert.equal(calc('1').ok, true);
+});
+
+test('formatDate는 요일을 붙인다', { skip: !has('formatDate') }, () => {
+  assert.equal(call(`formatDate('2026-11-14')`), '2026년 11월 14일 (토)');
+  assert.equal(call(`formatDate('2026-11-02')`), '2026년 11월 2일 (월)');
+  assert.equal(call(`formatDate('2026-11-01')`), '2026년 11월 1일 (일)');
 });
 
 test('computeTotal', { skip: !has('computeTotal') }, () => {
