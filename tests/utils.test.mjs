@@ -76,6 +76,36 @@ test('applySettlement', { skip: !has('applySettlement') }, () => {
   assert.deepEqual(data.categories, [{ id: 'a', name: '식비', hidden: false }]);
 });
 
+test('정산 저장: 저금통과 미정산 기록', { skip: !has('applySettlement') }, () => {
+  const t = load();
+  vm.runInContext(`getToday = () => '2026-11-14';`, t.ctx);
+  const settle = (piggyBalance, extra) => t.call(`(() => {
+    const d = { categories: [], expenses: [], months: {}, piggy: { balance: ${piggyBalance}, history: [] }, unsettled: [] };
+    applySettlement(d, '2026-11', { baseAmount: 1, carryIn: 0, deduction: 0, total: 1, allocations: {}, categories: [], lastMonth: '2026-10', ...${q(extra)} });
+    return d;
+  })()`);
+  const history = (d) => d.piggy.history.map(({ date, type, amount, memo }) => ({ date, type, amount, memo }));
+
+  const saved = settle(100, { piggyIn: 70000 });
+  assert.equal(saved.piggy.balance, 70100, '남은 돈 저축');
+  assert.deepEqual(history(saved), [{ date: '2026-11-14', type: 'save', amount: 70000, memo: '10월 남은 돈 저축' }]);
+  assert.deepEqual(saved.unsettled, []);
+
+  const taken = settle(150000, { piggyOut: 30000 });
+  assert.equal(taken.piggy.balance, 120000, '저금통 차감');
+  assert.deepEqual(history(taken), [{ date: '2026-11-14', type: 'deficit', amount: 30000, memo: '10월 초과분 차감' }]);
+
+  const kept = settle(500, { kept: 85000 });
+  assert.equal(kept.piggy.balance, 500, '그냥 두기는 저금통에 영향 없음');
+  assert.deepEqual(kept.piggy.history, []);
+  assert.deepEqual(kept.unsettled, [{ month: '2026-10', amount: 85000 }]);
+
+  const plain = settle(500, {});
+  assert.equal(plain.piggy.balance, 500, '0원은 내역을 남기지 않음');
+  assert.deepEqual(plain.piggy.history, []);
+  assert.deepEqual(plain.unsettled, []);
+});
+
 test('categoryNameError', { skip: !has('categoryNameError') }, () => {
   const cats = q([{ name: '식비' }, { name: '교통' }]);
   const error = (name) => call(`categoryNameError(${q(name)}, ${cats})`);

@@ -187,6 +187,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   const leftoverMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
   check('이월 저장', leftoverMonth.baseAmount === 1000000 && leftoverMonth.carryIn === 50000 && leftoverMonth.total === 1050000);
+  const leftoverPiggy = JSON.parse(await evaluate(raw)).piggy;
+  check('저축이 저금통과 내역에 기록', leftoverPiggy.balance === 70000 && leftoverPiggy.history.length === 1 && leftoverPiggy.history[0].type === 'save' && leftoverPiggy.history[0].amount === 70000);
+  check('저축이 대시보드 저금통에 표시', (await evaluate(text('piggy-balance'))) === '70,000원');
 
   // 지난달 초과 처리
   const pick = (value) => `document.querySelector('input[name="over"][value="${value}"]').click()`;
@@ -252,6 +255,40 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   const overMonth = JSON.parse(await evaluate(raw)).months['2026-11'];
   check('차감 저장', overMonth.baseAmount === 1000000 && overMonth.deduction === 55000 && overMonth.total === 945000);
+  const overData = JSON.parse(await evaluate(raw));
+  check('저금통 차감이 잔액과 내역에 기록', overData.piggy.balance === 120000 && overData.piggy.history.length === 1 && overData.piggy.history[0].type === 'deficit' && overData.piggy.history[0].amount === 30000);
+  check('저금통 + 다음 달 차감 = 초과분', overData.piggy.history[0].amount + overMonth.deduction === 85000);
+  check('저금통 차감이 대시보드에 표시', (await evaluate(text('piggy-balance'))) === '120,000원');
+
+  // 초과 처리: 다음 달 차감과 그냥 두기
+  for (const [option, deduction, unsettled] of [['next', 85000, 0], ['keep', 0, 85000]]) {
+    await evaluate(`localStorage.clear()`);
+    await reload();
+    await evaluate(seedLastMonth(1085000, 150000));
+    await reload();
+    await evaluate(pick(option));
+    await evaluate(type('base-amount', '1,000,000'));
+    await evaluate(next);
+    await evaluate(alloc(0, (1000000 - deduction).toLocaleString('ko-KR')));
+    await evaluate(next);
+    const d = JSON.parse(await evaluate(raw));
+    check(`${option}: 총 금액과 차감`, d.months['2026-11'].deduction === deduction && d.months['2026-11'].total === 1000000 - deduction);
+    check(`${option}: 저금통 그대로, 내역 없음`, d.piggy.balance === 150000 && d.piggy.history.length === 0);
+    check(`${option}: 미정산 기록`, unsettled === 0 ? d.unsettled.length === 0 : d.unsettled[0].month === '2026-10' && d.unsettled[0].amount === unsettled);
+  }
+  check('미정산 금액은 화면에 표시하지 않음', !(await evaluate(`document.body.textContent`)).includes('미정산'));
+
+  // 정산 도중 새로고침
+  await evaluate(`localStorage.clear()`);
+  await reload();
+  await evaluate(seedLastMonth(880000, 500));
+  await reload();
+  await evaluate(type('save-amount', '120,000'));
+  await evaluate(type('base-amount', '1,000,000'));
+  await evaluate(next);
+  await reload();
+  check('도중 새로고침: 창이 처음부터 다시 뜸', (await evaluate(onStep(1))) && (await evaluate(`document.getElementById('base-amount').value`)) === '');
+  check('도중 새로고침: 저금통 그대로', JSON.parse(await evaluate(raw)).piggy.balance === 500);
 
   // 지난달이 0원으로 딱 맞은 경우
   await evaluate(`localStorage.clear()`);

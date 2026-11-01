@@ -651,9 +651,20 @@ function applyCategories(data, drafts) {
   data.categories = [...existing, ...added];
 }
 
-// 정산 결과는 이 함수에서 한 번에 기록한다.
-function applySettlement(data, monthKey, { baseAmount, carryIn, deduction, total, allocations, categories }) {
+function addPiggyHistory(data, type, amount, memo) {
+  data.piggy.balance += type === 'save' ? amount : -amount;
+  data.piggy.history.push({ id: createId('piggy'), date: getToday(), type, amount, memo });
+}
+
+// 정산 결과는 이 함수에서 한 번에 기록한다. 저금통은 여기서만 변한다.
+function applySettlement(data, monthKey, settlement) {
+  const { baseAmount, carryIn, deduction, total, allocations, categories } = settlement;
+  const { piggyIn = 0, piggyOut = 0, kept = 0, lastMonth = null } = settlement;
+  const label = lastMonth === null ? '' : `${Number(lastMonth.slice(5))}월`;
   applyCategories(data, categories);
+  if (piggyIn > 0) addPiggyHistory(data, 'save', piggyIn, `${label} 남은 돈 저축`);
+  if (piggyOut > 0) addPiggyHistory(data, 'deficit', piggyOut, `${label} 초과분 차감`);
+  if (kept > 0) data.unsettled.push({ month: lastMonth, amount: kept });
   data.months[monthKey] = { baseAmount, carryIn, deduction, total, allocations, settled: true };
 }
 
@@ -971,14 +982,18 @@ function handleCategoryClick(event) {
 }
 
 function saveSettle() {
-  const { monthKey, categories, allocations } = settle;
-  const { base, carryIn, deduction, total } = currentCalc();
+  const { monthKey, categories, allocations, context, inputs } = settle;
+  const { base, carryIn, deduction, piggyIn, piggyOut, total } = currentCalc();
   if (!allocationSummary(categories, allocations, total).ok) return;
   applySettlement(state, monthKey, {
     baseAmount: base,
     carryIn,
     deduction,
     total,
+    piggyIn,
+    piggyOut,
+    kept: context.mode === 'over' && inputs.option === 'keep' ? context.amount : 0,
+    lastMonth: context.lastMonth,
     allocations: Object.fromEntries(categories.map(({ id }) => [id, parseOptionalAmount(allocations[id]).value])),
     categories,
   });
