@@ -176,6 +176,13 @@ test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
   assert.deepEqual(is(`wizardSteps(DATA, '2026-11')`), ['result', 'total', 'allocate']);
 });
 
+test('computeTotal', { skip: !has('computeTotal') }, () => {
+  assert.equal(call('computeTotal(1000000, 50000, 0)'), 1050000);
+  assert.equal(call('computeTotal(1000000, 0, 30000)'), 970000);
+  assert.equal(call('computeTotal(0, 50000, 0)'), 50000);
+  assert.equal(call('computeTotal(100, 0, 300)'), -200);
+});
+
 test('saveData 실패를 false로 알린다', { skip: !has('saveData') }, () => {
   const t = load();
   vm.runInContext(`localStorage.setItem = () => { throw new Error('QuotaExceededError'); };`, t.ctx);

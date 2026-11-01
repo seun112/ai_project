@@ -21,6 +21,30 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('첫 실행: 이전 버튼 없음', await evaluate(isHidden('wizard-back')));
   console.log('shot', await shot('wizard-first'));
 
+  // 총 금액 단계
+  const type = (id, value) => `(() => { const el = document.getElementById('${id}'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  const text = (id) => `document.getElementById('${id}').textContent`;
+  const next = `document.getElementById('wizard-next').click()`;
+  const onTotal = `!document.querySelector('[data-step="total"]').hidden`;
+  check('금액 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'base-amount');
+  for (const [value, label] of [['', '빈 값'], ['1.5', '소수점'], ['-100', '음수'], ['abc', '문자'], ['0', '0원']]) {
+    await evaluate(type('base-amount', value));
+    await evaluate(next);
+    check(`${label}: 다음 단계로 못 감`, await evaluate(onTotal));
+    check(`${label}: 오류 표시`, !(await evaluate(isHidden('base-error'))), await evaluate(text('base-error')));
+    check(`${label}: 잘못된 칸 표시`, (await evaluate(`document.getElementById('base-amount').getAttribute('aria-invalid')`)) === 'true');
+  }
+  console.log('shot', await shot('wizard-total-error'));
+  await evaluate(type('base-amount', '1,000,000'));
+  check('입력하면 오류가 사라짐', await evaluate(isHidden('base-error')));
+  check('입력하면 총 금액이 바로 갱신', (await evaluate(text('total-amount'))) === '1,000,000원');
+  check('계산식 표시', (await evaluate(text('total-base'))) === '1,000,000원' && (await evaluate(text('total-carry'))) === '+0원' && (await evaluate(text('total-deduction'))) === '−0원');
+  console.log('shot', await shot('wizard-total'));
+  await evaluate(next);
+  check('올바른 금액이면 다음 단계로 이동', !(await evaluate(onTotal)));
+  await evaluate(`document.getElementById('wizard-back').click()`);
+  check('돌아와도 입력값 유지', (await evaluate(`document.getElementById('base-amount').value`)) === '1,000,000');
+
   await evaluate(seedSettled);
   await reload();
   check('정산 완료 후 앱 표시', (await evaluate(isHidden('wizard'))) && !(await evaluate(isHidden('app'))));
@@ -96,6 +120,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   console.log('shot', await shot('wizard-result'));
   await evaluate(`document.getElementById('wizard-next').click()`);
   check('다음 단계로 이동', (await progress()) === '2026년 12월 정산 2 / 3');
+  await evaluate(`document.getElementById('base-amount').value = '500000'`);
   check('이전 버튼 표시', !(await evaluate(isHidden('wizard-back'))));
   await evaluate(`document.getElementById('wizard-back').click()`);
   check('이전 단계로 이동', (await progress()) === '2026년 12월 정산 1 / 3');

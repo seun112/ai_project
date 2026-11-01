@@ -144,6 +144,25 @@
   .sum strong { font-size: 2rem; line-height: 1.3; }
   .over { color: var(--seal); }
 
+  .field-label { display: block; margin-bottom: 0.25rem; font-weight: 700; }
+
+  .amount-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--ink-soft);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .amount-input[aria-invalid="true"] { border: 2px solid var(--ink); }
+
+  .field-error { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 700; }
+
+  .total-rows { margin-top: 1.5rem; }
+
   .wizard-actions {
     display: flex;
     justify-content: flex-end;
@@ -227,6 +246,15 @@
 
       <div data-step="total" hidden>
         <h1>이번 달 총 금액</h1>
+        <label class="field-label" for="base-amount">기본 금액</label>
+        <input class="amount-input" id="base-amount" inputmode="numeric" autocomplete="off" aria-describedby="base-error">
+        <p class="field-error" id="base-error" hidden></p>
+        <div class="ledger ledger-fit total-rows">
+          <div class="row"><span>기본 금액</span><span id="total-base"></span></div>
+          <div class="row"><span>이월</span><span id="total-carry"></span></div>
+          <div class="row"><span>차감</span><span id="total-deduction"></span></div>
+        </div>
+        <p class="sum"><span>총 금액</span><strong id="total-amount"></strong></p>
       </div>
 
       <div data-step="allocate" hidden>
@@ -465,6 +493,10 @@ function monthBalance(data, monthKey) {
   return data.months[monthKey].total - monthSpent(data, monthKey);
 }
 
+function computeTotal(baseAmount, carryIn, deduction) {
+  return baseAmount + carryIn - deduction;
+}
+
 // 앞선 정산이 없으면 첫 실행이므로 지난달 결과 단계를 뺀다.
 function wizardSteps(data, monthKey) {
   const steps = ['total', 'allocate'];
@@ -488,6 +520,36 @@ function renderResultStep() {
   balanceEl.classList.toggle('over', balance < 0);
 }
 
+function showFieldError(input, errorEl, message) {
+  if (message === '') input.removeAttribute('aria-invalid');
+  else input.setAttribute('aria-invalid', 'true');
+  errorEl.textContent = message;
+  errorEl.hidden = message === '';
+}
+
+function wizardBaseAmount() {
+  const parsed = parseAmount(document.getElementById('base-amount').value);
+  return parsed.ok ? parsed.value : 0;
+}
+
+function wizardTotal() {
+  return computeTotal(wizardBaseAmount(), wizard.carryIn, wizard.deduction);
+}
+
+function renderTotalStep() {
+  document.getElementById('total-base').textContent = formatWon(wizardBaseAmount());
+  document.getElementById('total-carry').textContent = `+${formatWon(wizard.carryIn)}`;
+  document.getElementById('total-deduction').textContent = `−${formatWon(wizard.deduction)}`;
+  document.getElementById('total-amount').textContent = formatWon(wizardTotal());
+}
+
+// 총 금액 단계의 오류 문구를 돌려준다. 문제가 없으면 빈 문자열이다.
+function totalStepError() {
+  const parsed = parseAmount(document.getElementById('base-amount').value);
+  if (!parsed.ok) return parsed.error;
+  return wizardTotal() < 1 ? '총 금액은 1원 이상이어야 합니다.' : '';
+}
+
 function renderWizardStep() {
   const { monthKey, steps, index } = wizard;
   const step = steps[index];
@@ -496,12 +558,16 @@ function renderWizardStep() {
     panel.hidden = panel.dataset.step !== step;
   });
   document.getElementById('wizard-back').hidden = index === 0;
+  if (step === 'total') document.getElementById('base-amount').focus();
 }
 
 function startWizard(monthKey) {
-  wizard = { monthKey, steps: wizardSteps(state, monthKey), index: 0 };
+  // 이월과 차감은 T6의 지난달 처리에서 채운다.
+  wizard = { monthKey, steps: wizardSteps(state, monthKey), index: 0, carryIn: 0, deduction: 0 };
   document.getElementById('wizard-form').reset();
+  showFieldError(document.getElementById('base-amount'), document.getElementById('base-error'), '');
   renderResultStep();
+  renderTotalStep();
   renderWizardStep();
 }
 
@@ -512,6 +578,15 @@ function moveWizard(delta) {
 
 function handleWizardSubmit(event) {
   event.preventDefault();
+  if (wizard.steps[wizard.index] === 'total') {
+    const message = totalStepError();
+    const input = document.getElementById('base-amount');
+    showFieldError(input, document.getElementById('base-error'), message);
+    if (message !== '') {
+      input.focus();
+      return;
+    }
+  }
   moveWizard(1);
 }
 
@@ -540,10 +615,10 @@ function setResetConfirm(open) {
 function enterApp() {
   const monthKey = monthKeyOf(getToday());
   const settling = needsSettlement(state, monthKey);
-  if (settling && wizard?.monthKey !== monthKey) startWizard(monthKey);
   document.getElementById('month-label').textContent = formatMonth(monthKey);
   document.getElementById('wizard').hidden = !settling;
   document.getElementById('app').hidden = settling;
+  if (settling && wizard?.monthKey !== monthKey) startWizard(monthKey);
 }
 
 function resetData() {
@@ -562,6 +637,10 @@ function init() {
   document.getElementById('reset-run').addEventListener('click', resetData);
   document.getElementById('wizard-form').addEventListener('submit', handleWizardSubmit);
   document.getElementById('wizard-back').addEventListener('click', () => moveWizard(-1));
+  document.getElementById('base-amount').addEventListener('input', (event) => {
+    showFieldError(event.target, document.getElementById('base-error'), '');
+    renderTotalStep();
+  });
   document.addEventListener('visibilitychange', () => {
     if (state !== null && document.visibilityState === 'visible') enterApp();
   });
