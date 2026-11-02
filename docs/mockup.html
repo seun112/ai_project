@@ -851,14 +851,14 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
   }
 
   /* ---------- 로그인 / 회원가입 ---------- */
-  var A = { mode: 'login', id: '', pw: '', pw2: '', err: {} };
-  var ID_RE = /^[A-Za-z0-9]+$/;
+  var A = { mode: 'login', email: '', pw: '', pw2: '', err: {} };
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   function afield(id, label, type, val, hint, err, auto, red) {
     var bad = !!(err || red);
     return '<div class="afield"><label for="' + id + '">' + label + '</label>' +
       '<input id="' + id + '" class="field" type="' + type + '" value="' + esc(val) + '" autocomplete="' + auto + '"' +
-      (type === 'text' ? ' autocapitalize="off" spellcheck="false"' : '') + (bad ? ' aria-invalid="true"' : '') + '>' +
+      (type === 'email' ? ' autocapitalize="off" spellcheck="false"' : '') + (bad ? ' aria-invalid="true"' : '') + '>' +
       (err ? '<span class="err" role="alert">' + err + '</span>' : (hint ? '<span class="sub">' + hint + '</span>' : '')) + '</div>';
   }
   function renderAuth() {
@@ -867,9 +867,9 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
       '<button type="button" class="tab" data-auth="login"' + (login ? ' aria-current="page"' : '') + '>로그인</button>' +
       '<button type="button" class="tab" data-auth="signup"' + (!login ? ' aria-current="page"' : '') + '>회원가입</button></div>';
     var fields = login
-      ? afield('a-id', '아이디', 'text', A.id, '', e.id, 'username', e.idRed) +
+      ? afield('a-email', '이메일', 'email', A.email, '', e.email, 'email', e.emailRed) +
         afield('a-pw', '비밀번호', 'password', A.pw, '', e.pw, 'current-password')
-      : afield('a-id', '아이디', 'text', A.id, '영문과 숫자만 쓸 수 있어요', e.id, 'username') +
+      : afield('a-email', '이메일', 'email', A.email, '', e.email, 'email') +
         afield('a-pw', '비밀번호', 'password', A.pw, '8자 이상으로 만들어 주세요', e.pw, 'new-password') +
         afield('a-pw2', '비밀번호 확인', 'password', A.pw2, '', e.pw2, 'new-password');
     $('#authview').innerHTML =
@@ -881,16 +881,16 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
         '<button type="submit" class="btn go wide">' + (login ? '로그인' : '회원가입') + '</button>' +
         '<p class="auth-foot">' + (login ? '계정이 없나요? <button type="button" data-auth="signup">회원가입</button>' : '이미 계정이 있나요? <button type="button" data-auth="login">로그인</button>') + '</p>' +
       '</form></main>' +
-      '<section class="auth-demo" aria-label="목업 도구"><p>목업 도구 · 실제 서버가 없어서 아이디와 비밀번호는 이 브라우저에만 저장돼요. 진짜 비밀번호는 넣지 마세요.</p>' +
-        '<div><button type="button" class="btn small" data-auth="demo">연습 계정으로 로그인 (demo1234 / demo1234)</button></div></section>' +
+      '<section class="auth-demo" aria-label="목업 도구"><p>목업 도구 · 실제 서버가 없어서 이메일과 비밀번호는 이 브라우저에만 저장돼요. 진짜 비밀번호는 넣지 마세요.</p>' +
+        '<div><button type="button" class="btn small" data-auth="demo">연습 계정으로 로그인 (demo@example.com / demo1234)</button></div></section>' +
       '</div>';
   }
   function showAuth(mode) {
-    A = { mode: mode || 'login', id: '', pw: '', pw2: '', err: {} };
+    A = { mode: mode || 'login', email: '', pw: '', pw2: '', err: {} };
     $('#app').hidden = true;
     $('#authview').hidden = false;
     renderAuth();
-    var f = $('#a-id'); if (f) f.focus();
+    var f = $('#a-email'); if (f) f.focus();
   }
   function enterApp(id) {
     user = id;
@@ -908,24 +908,24 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
     if (bad) bad.focus();
   }
   function submitAuth() {
-    var id = A.id.trim(), e = {};
-    if (!id) e.id = '아이디를 입력해 주세요.';
-    else if (!ID_RE.test(id)) e.id = '영문과 숫자만 쓸 수 있어요.';
+    var email = A.email.trim().toLowerCase(), e = {};  // 대문자로 입력해도 소문자로 맞춰서 비교
+    if (!email) e.email = '이메일을 입력해 주세요.';
+    else if (!EMAIL_RE.test(email)) e.email = '이메일 형식으로 입력해 주세요.';
     if (A.mode === 'login') {
       if (!A.pw) e.pw = '비밀번호를 입력해 주세요.';
-      if (!e.id && !e.pw) {
-        var u = AUTH.users[id];
-        if (!u || u.pw !== A.pw) { e.pw = '아이디 또는 비밀번호가 맞지 않아요.'; e.idRed = true; }
-        else { enterApp(id); return; }
+      if (!e.email && !e.pw) {
+        var u = AUTH.users[email];
+        if (!u || u.pw !== A.pw) { e.pw = '이메일 또는 비밀번호가 맞지 않아요.'; e.emailRed = true; }
+        else { enterApp(email); return; }
       }
     } else {
-      if (!e.id && AUTH.users[id]) e.id = '이미 있는 아이디예요.';
+      if (!e.email && AUTH.users[email]) e.email = '이미 가입된 이메일이에요.';
       if (A.pw.length < 8) e.pw = '비밀번호는 8자 이상으로 만들어 주세요.';
       if (!A.pw2) e.pw2 = '비밀번호를 한 번 더 입력해 주세요.';
       else if (A.pw2 !== A.pw) e.pw2 = '비밀번호가 서로 달라요.';
-      if (!e.id && !e.pw && !e.pw2) {
-        AUTH.users[id] = { pw: A.pw };
-        enterApp(id);
+      if (!e.email && !e.pw && !e.pw2) {
+        AUTH.users[email] = { pw: A.pw };
+        enterApp(email);
         return;
       }
     }
@@ -940,13 +940,13 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
     if (!t) return;
     var a = t.dataset.auth;
     if (a === 'demo') {
-      if (!AUTH.users.demo1234) { AUTH.users.demo1234 = { pw: 'demo1234' }; }
-      enterApp('demo1234');
+      if (!AUTH.users['demo@example.com']) { AUTH.users['demo@example.com'] = { pw: 'demo1234' }; }
+      enterApp('demo@example.com');
     } else { showAuth(a); }
   });
   $('#authview').addEventListener('input', function (e) {
     var el = e.target;
-    if (el.id === 'a-id') A.id = el.value;
+    if (el.id === 'a-email') A.email = el.value;
     else if (el.id === 'a-pw') A.pw = el.value;
     else if (el.id === 'a-pw2') A.pw2 = el.value;
   });
