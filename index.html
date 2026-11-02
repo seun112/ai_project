@@ -363,17 +363,18 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
     </div>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script>
 'use strict';
 
 // ---- 상수 ----
 
+// 공개용 키라서 저장소에 둔다. 사용자별 접근 제한은 Row Level Security가 맡는다.
+const SUPABASE_URL = 'https://kqqveotykeuyffrlhrxm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_1XpOuFjG5GUXEROTHBHaAQ_j9iU3hwD';
 const STORAGE_KEY = 'living-budget';
-const USERS_KEY = 'living-budget-users';
-const SESSION_KEY = 'living-budget-session';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
-const HASH_ROUNDS = 100000;
 const DATA_VERSION = 1;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
 const CATEGORY_NAME_MAX = 10;
@@ -1542,24 +1543,15 @@ function handleSettingsClick(event) {
 const TOMATO_LARGE = '<svg width="64" height="64" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="27" r="17" fill="#E8503F" stroke="#2B4A22" stroke-width="3"></circle><path d="M24 12 L19 5 L24 8 L29 5 Z M14 14 L24 11 L34 14 L24 15 Z" fill="#6FB34A" stroke="#2B4A22" stroke-width="2" stroke-linejoin="round"></path><circle cx="18" cy="27" r="2" fill="#2B4A22"></circle><circle cx="30" cy="27" r="2" fill="#2B4A22"></circle><circle cx="14" cy="32" r="2.5" fill="#F7A19A"></circle><circle cx="34" cy="32" r="2.5" fill="#F7A19A"></circle></svg>';
 
 // 입력값은 화면을 다시 그릴 때 속성이 아닌 값으로만 되돌린다. 비밀번호가 HTML에 남지 않게 한다.
-let auth = { mode: 'login', email: '', pw: '', pw2: '', errors: {} };
+let auth = { mode: 'login', email: '', pw: '', pw2: '', errors: {}, busy: false };
+let client = null;
 
-function readUsers() {
-  try {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY));
-    return isPlainObject(users) ? users : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeUsers(users) {
-  try {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    return true;
-  } catch {
-    return false;
-  }
+// 세션은 sessionStorage에만 둔다. 브라우저를 닫으면 로그인이 끝난다. (기본값 localStorage는 쓰지 않는다)
+function db() {
+  client ??= globalThis.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { storage: sessionStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  });
+  return client;
 }
 
 // 대문자로 입력해도 같은 이메일로 본다.
@@ -1567,15 +1559,14 @@ function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 
-// 입력 오류를 칸별로 돌려준다. 비어 있으면 통과다.
-function authErrors({ mode, email, pw, pw2 }, users) {
+// 입력 오류를 칸별로 돌려준다. 비어 있으면 통과다. 이미 가입된 이메일은 서버가 알려 준다.
+function authErrors({ mode, email, pw, pw2 }) {
   const errors = {};
   const normalized = normalizeEmail(email);
   if (normalized === '') errors.email = '이메일을 입력해 주세요.';
   else if (!EMAIL_PATTERN.test(normalized)) errors.email = '이메일 형식으로 입력해 주세요.';
   if (pw === '') errors.pw = '비밀번호를 입력해 주세요.';
   if (mode === 'signup') {
-    if (errors.email === undefined && Object.hasOwn(users, normalized)) errors.email = '이미 가입된 이메일이에요.';
     if (errors.pw === undefined && pw.length < PASSWORD_MIN) errors.pw = '비밀번호는 8자 이상으로 만들어 주세요.';
     if (pw2 === '') errors.pw2 = '비밀번호를 한 번 더 입력해 주세요.';
     else if (pw2 !== pw) errors.pw2 = '비밀번호가 서로 달라요.';
@@ -1583,20 +1574,25 @@ function authErrors({ mode, email, pw, pw2 }, users) {
   return errors;
 }
 
-function toHex(bytes) {
-  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+// Supabase 오류 코드를 입력칸 안내로 바꾼다. 연결 문제를 "비밀번호가 틀렸다"로 말하지 않게 나머지는 따로 안내한다.
+function authServerErrors(code, mode) {
+  if (mode === 'login' && code === 'invalid_credentials') return { pw: '이메일 또는 비밀번호가 맞지 않아요.', emailRed: true };
+  if (mode === 'signup' && (code === 'user_already_exists' || code === 'email_exists')) return { email: '이미 가입된 이메일이에요.' };
+  if (mode === 'signup' && code === 'weak_password') return { pw: '비밀번호는 8자 이상으로 만들어 주세요.' };
+  if (code === 'email_address_invalid') return { email: '이메일 형식으로 입력해 주세요.' };
+  return { pw: '지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.' };
 }
 
-function newSalt() {
-  return toHex(crypto.getRandomValues(new Uint8Array(16)));
-}
-
-// 브라우저 저장 단계에서도 비밀번호를 그대로 두지 않는다. T9에서 서버 해시로 바꾼다.
-async function hashPassword(password, salt) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: encoder.encode(salt), iterations: HASH_ROUNDS }, key, 256);
-  return toHex(bits);
+// 성공하면 사용자 id, 실패하면 오류 코드를 돌려준다. 라이브러리를 못 불러온 경우도 실패로 다룬다.
+async function requestAuth({ mode, email, pw }) {
+  const form = { email: normalizeEmail(email), password: pw };
+  try {
+    const { data, error } = mode === 'signup' ? await db().auth.signUp(form) : await db().auth.signInWithPassword(form);
+    if (error) return { code: error.code };
+    return data.session ? { userId: data.user.id } : {};
+  } catch {
+    return {};
+  }
 }
 
 function authField(id, label, type, hint, error, autocomplete, red) {
@@ -1637,7 +1633,7 @@ function renderAuth() {
 }
 
 function showAuth(mode) {
-  auth = { mode, email: '', pw: '', pw2: '', errors: {} };
+  auth = { mode, email: '', pw: '', pw2: '', errors: {}, busy: false };
   document.getElementById('app').hidden = true;
   document.getElementById('authview').hidden = false;
   renderAuth();
@@ -1650,14 +1646,8 @@ function showAuthErrors(errors) {
   document.querySelector('#authview [aria-invalid="true"]')?.focus();
 }
 
-// 로그인 상태는 sessionStorage에만 둔다. 브라우저를 닫으면 끝난다.
 function enterAs(userId) {
   currentUser = userId;
-  try {
-    sessionStorage.setItem(SESSION_KEY, userId);
-  } catch {
-    // 저장이 막혀도 이번 화면에서는 쓸 수 있다.
-  }
   document.getElementById('authview').hidden = true;
   const result = loadData(userId);
   if (result.status === 'corrupt') {
@@ -1671,27 +1661,18 @@ function enterAs(userId) {
 }
 
 async function submitAuth() {
-  const users = readUsers();
-  const errors = authErrors(auth, users);
+  if (auth.busy) return;
+  const errors = authErrors(auth);
   if (Object.keys(errors).length > 0) {
     showAuthErrors(errors);
     return;
   }
-  const email = normalizeEmail(auth.email);
-  if (auth.mode === 'signup') {
-    const salt = newSalt();
-    users[email] = { salt, passwordHash: await hashPassword(auth.pw, salt), createdAt: getToday() };
-    const saved = writeUsers(users);
-    document.getElementById('save-error').hidden = saved;
-    if (saved) enterAs(email);
-    return;
-  }
-  const user = Object.hasOwn(users, email) ? users[email] : null;
-  if (user === null || await hashPassword(auth.pw, user.salt) !== user.passwordHash) {
-    showAuthErrors({ pw: '이메일 또는 비밀번호가 맞지 않아요.', emailRed: true });
-    return;
-  }
-  enterAs(email);
+  auth.busy = true;
+  document.querySelector('#auth-form button[type="submit"]').disabled = true;
+  const { userId, code } = await requestAuth(auth);
+  auth.busy = false;
+  if (userId === undefined) showAuthErrors(authServerErrors(code, auth.mode));
+  else enterAs(userId);
 }
 
 function handleAuthInput(event) {
@@ -1701,10 +1682,11 @@ function handleAuthInput(event) {
   if (id === 'a-pw2') auth.pw2 = value;
 }
 
-function sessionUser() {
+// 새로고침하면 남아 있는 세션으로 다시 들어간다.
+async function sessionUser() {
   try {
-    const id = sessionStorage.getItem(SESSION_KEY);
-    return id !== null && Object.hasOwn(readUsers(), id) ? id : null;
+    const { data } = await db().auth.getSession();
+    return data.session?.user.id ?? null;
   } catch {
     return null;
   }
@@ -1755,7 +1737,7 @@ function resetData() {
   enterApp();
 }
 
-function init() {
+async function init() {
   document.querySelectorAll('[data-view]').forEach((item) => {
     item.addEventListener('click', () => showView(item.dataset.view));
   });
@@ -1798,10 +1780,10 @@ function init() {
   });
   authview.addEventListener('click', (event) => {
     const button = event.target.closest('[data-auth]');
-    if (button !== null) showAuth(button.dataset.auth);
+    if (button !== null && !auth.busy) showAuth(button.dataset.auth);
   });
 
-  const userId = sessionUser();
+  const userId = await sessionUser();
   if (userId === null) showAuth('login');
   else enterAs(userId);
 }

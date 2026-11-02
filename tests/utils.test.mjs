@@ -140,8 +140,7 @@ test('건너뛴 달은 다음 정산의 기준이 되지 않는다', { skip: !ha
 });
 
 test('authErrors', { skip: !has('authErrors') }, () => {
-  const users = q({ 'tomato@example.com': {} });
-  const errors = (form) => call(`authErrors(${q({ pw: '', pw2: '', ...form })}, ${users})`);
+  const errors = (form) => call(`authErrors(${q({ pw: '', pw2: '', ...form })})`);
   const badFormat = '이메일 형식으로 입력해 주세요.';
   assert.deepEqual(errors({ mode: 'login', email: 'tomato@example.com', pw: 'x' }), {}, '로그인은 길이를 보지 않음');
   assert.deepEqual(errors({ mode: 'login', email: '', pw: '' }), { email: '이메일을 입력해 주세요.', pw: '비밀번호를 입력해 주세요.' });
@@ -153,23 +152,30 @@ test('authErrors', { skip: !has('authErrors') }, () => {
 
   const ok = { mode: 'signup', email: 'new@example.com', pw: 'password', pw2: 'password' };
   assert.deepEqual(errors(ok), {}, '8자는 허용');
-  assert.equal(errors({ ...ok, email: 'tomato@example.com' }).email, '이미 가입된 이메일이에요.');
-  assert.equal(errors({ ...ok, email: 'TOMATO@Example.com' }).email, '이미 가입된 이메일이에요.', '대소문자가 달라도 같은 이메일');
   assert.equal(errors({ ...ok, pw: 'passwor', pw2: 'passwor' }).pw, '비밀번호는 8자 이상으로 만들어 주세요.');
   assert.equal(errors({ ...ok, pw: '', pw2: 'password' }).pw, '비밀번호를 입력해 주세요.');
   assert.equal(errors({ ...ok, pw2: '' }).pw2, '비밀번호를 한 번 더 입력해 주세요.');
   assert.equal(errors({ ...ok, pw2: 'password2' }).pw2, '비밀번호가 서로 달라요.');
 });
 
-test('hashPassword', { skip: !has('hashPassword') }, async () => {
+test('authServerErrors', { skip: !has('authServerErrors') }, () => {
+  const errors = (code, mode) => call(`authServerErrors(${q(code)}, ${q(mode)})`);
+  const failed = { pw: '지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.' };
+  assert.deepEqual(errors('invalid_credentials', 'login'), { pw: '이메일 또는 비밀번호가 맞지 않아요.', emailRed: true });
+  assert.deepEqual(errors('user_already_exists', 'signup'), { email: '이미 가입된 이메일이에요.' });
+  assert.deepEqual(errors('email_exists', 'signup'), { email: '이미 가입된 이메일이에요.' });
+  assert.deepEqual(errors('weak_password', 'signup'), { pw: '비밀번호는 8자 이상으로 만들어 주세요.' });
+  assert.deepEqual(errors('email_address_invalid', 'signup'), { email: '이메일 형식으로 입력해 주세요.' });
+  assert.deepEqual(errors('over_request_rate_limit', 'login'), failed);
+  assert.deepEqual(errors('unexpected_failure', 'signup'), failed);
+  assert.deepEqual(call(`authServerErrors(undefined, 'login')`), failed, '연결 실패');
+});
+
+test('requestAuth: 라이브러리를 못 불러와도 멈추지 않는다', { skip: !has('requestAuth') }, async () => {
   const { ctx: c } = load();
-  const hash = (pw, salt) => vm.runInContext(`hashPassword(${q(pw)}, ${q(salt)})`, c);
-  const first = await hash('password1', 'aa');
-  assert.match(first, /^[0-9a-f]{64}$/);
-  assert.equal(await hash('password1', 'aa'), first, '같은 입력은 같은 해시');
-  assert.notEqual(await hash('password2', 'aa'), first, '비밀번호가 다르면 다른 해시');
-  assert.notEqual(await hash('password1', 'bb'), first, '소금이 다르면 다른 해시');
-  assert.notEqual(vm.runInContext('newSalt()', c), vm.runInContext('newSalt()', c));
+  const result = await vm.runInContext(`requestAuth({ mode: 'login', email: 'a@b.co', pw: 'password1' })`, c);
+  assert.equal(result.userId, undefined);
+  assert.equal(result.code, undefined);
 });
 
 test('계정마다 저장 키가 다르다', { skip: !has('dataKey') }, () => {

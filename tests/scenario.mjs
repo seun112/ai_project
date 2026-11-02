@@ -25,7 +25,7 @@ const seedSettled = `(() => {
 })()`;
 
 export default async function ({ evaluate, reload, size, shot, check, setToday }) {
-  // 비밀번호 해시는 비동기라서 화면이 바뀔 때까지 기다린다.
+  // 서버 응답은 비동기라서 화면이 바뀔 때까지 기다린다.
   const until = async (expression) => {
     for (let i = 0; i < 200; i++) {
       if (await evaluate(expression)) return true;
@@ -89,10 +89,10 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await fillAuth('Tester@Example.COM', 'password1', 'password1');
   await evaluate(authSubmit);
   check('가입하면 바로 들어감', await until(appEntered));
-  check('대문자로 입력해도 소문자로 저장', (await evaluate(`Object.keys(JSON.parse(localStorage.getItem('living-budget-users'))).join()`)) === 'tester@example.com');
-  const storedAll = await evaluate(`JSON.stringify({ ...localStorage })`);
-  check('비밀번호 원문은 저장하지 않음', !storedAll.includes('password1'));
-  check('해시와 소금 저장', await evaluate(`(() => { const u = JSON.parse(localStorage.getItem('living-budget-users'))['tester@example.com']; return /^[0-9a-f]{64}$/.test(u.passwordHash) && /^[0-9a-f]{32}$/.test(u.salt); })()`));
+  check('대문자로 입력해도 소문자로 가입', (await evaluate(`Object.keys(JSON.parse(localStorage.getItem('fake-supabase-users'))).join()`)) === 'tester@example.com');
+  check('브라우저에 계정 목록을 두지 않음', (await evaluate(`localStorage.getItem('living-budget-users')`)) === null);
+  check('세션은 sessionStorage에만 있음', (await evaluate(`sessionStorage.getItem('fake-supabase-session') !== null`)) && (await evaluate(`localStorage.getItem('fake-supabase-session')`)) === null);
+  check('비밀번호를 세션에 남기지 않음', !(await evaluate(`JSON.stringify({ ...sessionStorage })`)).includes('password1'));
   check('로그아웃 버튼 없음', !/로그아웃/.test(await evaluate(`document.body.textContent`)));
 
   // 첫 접속: 앱 위에 정산 창이 뜬다
@@ -888,6 +888,25 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await closeBrowser();
   check('브라우저를 닫으면 로그인 화면', !(await evaluate(isHidden('authview'))) && (await evaluate(isHidden('app'))));
   check('로그인 전에는 데이터가 화면에 없음', !(await evaluate(`document.body.textContent`)).includes('테스터 지출'));
+  await fillAuth('tester@example.com', 'password1');
+  check('서버 응답을 기다리는 동안 버튼 비활성', await evaluate(`${authSubmit}; document.querySelector('#auth-form button[type="submit"]').disabled`));
+  await until(appEntered);
+  await closeBrowser();
+  await fillAuth('tester@example.com', 'password1');
+  check('서버 응답 전에는 탭을 바꿀 수 없음', await evaluate(`${authSubmit}; ${authTab('signup')}; document.getElementById('a-pw2') === null`));
+  await until(appEntered);
+  await closeBrowser();
+  await evaluate(`localStorage.setItem('fake-supabase-fail', 'auth')`);
+  await fillAuth('tester@example.com', 'password1');
+  await evaluate(authSubmit);
+  check('서버 오류: 비밀번호 탓으로 말하지 않음', await until(`${authErrors} === '지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.'`), await evaluate(authErrors));
+  check('서버 오류: 입력한 값 유지', (await evaluate(`document.getElementById('a-email').value`)) === 'tester@example.com');
+  await evaluate(authTab('signup'));
+  await fillAuth('new@example.com', 'password1', 'password1');
+  await evaluate(authSubmit);
+  check('연결 실패(예외): 가입도 안내', await until(`${authErrors} === '지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.'`), await evaluate(authErrors));
+  await evaluate(`localStorage.removeItem('fake-supabase-fail')`);
+  await evaluate(authTab('login'));
   await fillAuth('tester@example.com', 'wrongpass1');
   await evaluate(authSubmit);
   check('틀린 비밀번호: 로그인 실패 문구', await until(`${authErrors} === '이메일 또는 비밀번호가 맞지 않아요.'`));
@@ -903,7 +922,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(authTab('signup'));
   await fillAuth('TESTER@example.com', 'password1', 'password1');
   await evaluate(authSubmit);
-  check('이미 가입된 이메일: 가입 막힘', (await evaluate(authErrors)) === '이미 가입된 이메일이에요.', await evaluate(authErrors));
+  check('이미 가입된 이메일: 가입 막힘', await until(`${authErrors} === '이미 가입된 이메일이에요.'`), await evaluate(authErrors));
   await fillAuth('other2@example.com', 'password2', 'password2');
   await evaluate(authSubmit);
   check('다른 계정 가입', await until(appEntered));

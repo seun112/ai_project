@@ -1,7 +1,7 @@
 // Headless Edge를 CDP로 띄워 index.html을 file://로 검사한다. 시나리오는 scenario.mjs에 있다.
 // 실행: node tests/browser.mjs (스크린샷은 tests/shots/에 저장)
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -85,6 +85,10 @@ const check = (label, ok, detail = '') => { if (!ok) failed++; console.log(`${ok
 
 await send('Page.enable');
 await send('Runtime.enable');
+await send('Network.enable');
+// 실제 라이브러리는 받지 않고 가짜 클라이언트를 쓴다.
+await send('Network.setBlockedURLs', { urls: ['*cdn.jsdelivr.net*'] });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: readFileSync(join(here, 'fake-supabase.js'), 'utf8') });
 await size(1200, 800);
 await open();
 await evaluate('localStorage.clear()');
