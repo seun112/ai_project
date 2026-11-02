@@ -7,6 +7,10 @@ Desktop.ini
 .vscode/
 .idea/
 
+# Secrets
+.env
+.env.*
+
 # Browser check output
 tests/shots/
 tests/edge-profile/
