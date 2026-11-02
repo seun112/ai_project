@@ -101,6 +101,9 @@ export default async function ({ evaluate, reload: reloadPage, size, shot, check
   check('비밀번호를 세션에 남기지 않음', !(await evaluate(`JSON.stringify({ ...sessionStorage })`)).includes('password1'));
   check('로그아웃 버튼 없음', !/로그아웃/.test(await evaluate(`document.body.textContent`)));
 
+  // 입력칸과 버튼에는 화면 낭독기가 읽을 이름이 있어야 한다.
+  const unnamed = (root) => `[...document.querySelectorAll('${root} input, ${root} button')].filter((el) => el.offsetParent !== null).filter((el) => (el.tagName === 'BUTTON' ? !(el.textContent.trim() || el.getAttribute('aria-label')) : !(el.labels.length || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')))).map((el) => el.id || el.outerHTML.slice(0, 60)).join()`;
+
   // 첫 접속: 앱 위에 정산 창이 뜬다
   const appBlocked = `!document.getElementById('app').hidden && document.getElementById('app').inert`;
   check('첫 실행: 정산 창 표시', !(await evaluate(isHidden('overlay'))));
@@ -143,7 +146,9 @@ export default async function ({ evaluate, reload: reloadPage, size, shot, check
   check('돌아와도 입력값 유지', (await evaluate(`document.getElementById('base-amount').value`)) === '1,000,000');
 
   // 분류별 배분 단계
+  check('정산 1단계: 모든 입력과 버튼에 이름', (await evaluate(unnamed('#overlay'))) === '', await evaluate(unnamed('#overlay')));
   await evaluate(next);
+  check('정산 2단계: 모든 입력과 버튼에 이름', (await evaluate(unnamed('#overlay'))) === '', await evaluate(unnamed('#overlay')));
   check('배분: 분류 5개 입력칸', (await evaluate(`document.querySelectorAll('[data-alloc]').length`)) === 5);
   check('배분: 첫 칸에 포커스', await evaluate(`document.activeElement === document.querySelector('[data-alloc]')`));
   check('배분: 총 금액 표시', (await evaluate(text('alloc-total'))) === '1,000,000원');
@@ -840,6 +845,10 @@ export default async function ({ evaluate, reload: reloadPage, size, shot, check
   check('설정 320px 넘침 없음', !(await evaluate(overflow)));
   console.log('shot', await shot('settings-320'));
   await size(1200, 800);
+  for (const view of ['settings', 'calendar', 'dashboard']) {
+    await evaluate(`document.querySelector('[data-view="${view}"]').click()`);
+    check(`${view}: 모든 입력과 버튼에 이름`, (await evaluate(unnamed('#app'))) === '', await evaluate(unnamed('#app')));
+  }
 
   // 두 달 이상 건너뛰고 접속
   await setToday('2026-08-20');

@@ -222,7 +222,7 @@ test('formatWon', () => {
   assert.equal(call('formatWon(999)'), '999원');
 });
 
-test('날짜 유틸', { skip: !has('weeksOfMonth') }, () => {
+test('날짜 유틸', { skip: !has('addMonths') }, () => {
   assert.equal(call(`toDateKey(new Date(2026, 0, 5))`), '2026-01-05');
   assert.equal(call(`monthKeyOf('2026-11-03')`), '2026-11');
   assert.equal(call(`addMonths('2026-12', 1)`), '2027-01');
@@ -234,21 +234,6 @@ test('날짜 유틸', { skip: !has('weeksOfMonth') }, () => {
   assert.equal(call(`monthDates('2026-11')[0]`), '2026-11-01');
   assert.equal(call(`monthDates('2026-11').at(-1)`), '2026-11-30');
   assert.equal(call(`formatMonth('2026-03')`), '2026년 3월');
-});
-
-test('weeksOfMonth', { skip: !has('weeksOfMonth') }, () => {
-  const summary = (m) => call(`weeksOfMonth('${m}').map((w) => [w[0].slice(8), w.at(-1).slice(8)].join('-'))`);
-  // 1일이 일요일: 첫 주는 1일 하루, 마지막 주는 30일 월요일 하루
-  assert.deepEqual(summary('2026-11'), ['01-01', '02-08', '09-15', '16-22', '23-29', '30-30']);
-  // 1일이 월요일
-  assert.deepEqual(summary('2026-06'), ['01-07', '08-14', '15-21', '22-28', '29-30']);
-  // 윤년 2월, 1일이 화요일
-  assert.deepEqual(summary('2028-02'), ['01-06', '07-13', '14-20', '21-27', '28-29']);
-  for (const m of ['2026-11', '2026-06', '2028-02']) {
-    const days = call(`weeksOfMonth('${m}').flat()`);
-    assert.deepEqual(days, call(`monthDates('${m}')`), m);
-    for (const week of call(`weeksOfMonth('${m}')`)) assert.ok(week.length <= 7);
-  }
 });
 
 test('isLockedDate는 이번 달 이전만 잠근다', { skip: !has('isLockedDate') }, () => {
@@ -276,12 +261,6 @@ test('createEmptyData', { skip: !has('createEmptyData') }, () => {
   assert.deepEqual(data.unsettled, []);
   assert.deepEqual(call('dataToRows(createEmptyData())').categories.map((c) => c.name), ['식비', '의류', '취미', '교통', '기타'], '만든 순서가 id 순서');
   assert.deepEqual([...data.categories].sort((a, b) => (a.id < b.id ? -1 : 1)), data.categories, '같은 1ms에 만들어도 id 순서가 만든 순서');
-});
-
-test('formatSigned', { skip: !has('formatSigned') }, () => {
-  assert.equal(call('formatSigned(45000)'), '+45,000원');
-  assert.equal(call('formatSigned(0)'), '0원');
-  assert.equal(call('formatSigned(-50000)'), '-50,000원');
 });
 
 test('정산 판단', { skip: !has('lastSettledMonth') }, () => {
