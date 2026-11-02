@@ -140,18 +140,21 @@ test('건너뛴 달은 다음 정산의 기준이 되지 않는다', { skip: !ha
 });
 
 test('authErrors', { skip: !has('authErrors') }, () => {
-  const users = q({ tomato1: {} });
+  const users = q({ 'tomato@example.com': {} });
   const errors = (form) => call(`authErrors(${q({ pw: '', pw2: '', ...form })}, ${users})`);
-  assert.deepEqual(errors({ mode: 'login', id: 'tomato1', pw: 'x' }), {}, '로그인은 길이를 보지 않음');
-  assert.deepEqual(errors({ mode: 'login', id: '', pw: '' }), { id: '아이디를 입력해 주세요.', pw: '비밀번호를 입력해 주세요.' });
-  assert.equal(errors({ mode: 'login', id: '토마토', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
-  assert.equal(errors({ mode: 'login', id: 'to mato', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
-  assert.equal(errors({ mode: 'login', id: 'a_b', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
+  const badFormat = '이메일 형식으로 입력해 주세요.';
+  assert.deepEqual(errors({ mode: 'login', email: 'tomato@example.com', pw: 'x' }), {}, '로그인은 길이를 보지 않음');
+  assert.deepEqual(errors({ mode: 'login', email: '', pw: '' }), { email: '이메일을 입력해 주세요.', pw: '비밀번호를 입력해 주세요.' });
+  assert.equal(errors({ mode: 'login', email: '   ', pw: 'x' }).email, '이메일을 입력해 주세요.');
+  for (const email of ['tomato', 'tomato@', '@example.com', 'to mato@example.com', 'tomato@example', 'a@b@c.com']) {
+    assert.equal(errors({ mode: 'login', email, pw: 'x' }).email, badFormat, email);
+  }
+  assert.deepEqual(errors({ mode: 'login', email: ' Tomato@Example.COM ', pw: 'x' }), {}, '앞뒤 공백과 대문자 허용');
 
-  const ok = { mode: 'signup', id: 'new1', pw: 'password', pw2: 'password' };
+  const ok = { mode: 'signup', email: 'new@example.com', pw: 'password', pw2: 'password' };
   assert.deepEqual(errors(ok), {}, '8자는 허용');
-  assert.equal(errors({ ...ok, id: 'tomato1' }).id, '이미 있는 아이디예요.');
-  assert.deepEqual(errors({ ...ok, id: 'constructor' }), {}, '객체 기본 속성 이름도 쓸 수 있음');
+  assert.equal(errors({ ...ok, email: 'tomato@example.com' }).email, '이미 가입된 이메일이에요.');
+  assert.equal(errors({ ...ok, email: 'TOMATO@Example.com' }).email, '이미 가입된 이메일이에요.', '대소문자가 달라도 같은 이메일');
   assert.equal(errors({ ...ok, pw: 'passwor', pw2: 'passwor' }).pw, '비밀번호는 8자 이상으로 만들어 주세요.');
   assert.equal(errors({ ...ok, pw: '', pw2: 'password' }).pw, '비밀번호를 입력해 주세요.');
   assert.equal(errors({ ...ok, pw2: '' }).pw2, '비밀번호를 한 번 더 입력해 주세요.');

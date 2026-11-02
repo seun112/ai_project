@@ -371,7 +371,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 const STORAGE_KEY = 'living-budget';
 const USERS_KEY = 'living-budget-users';
 const SESSION_KEY = 'living-budget-session';
-const ID_PATTERN = /^[A-Za-z0-9]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
 const HASH_ROUNDS = 100000;
 const DATA_VERSION = 1;
@@ -1542,7 +1542,7 @@ function handleSettingsClick(event) {
 const TOMATO_LARGE = '<svg width="64" height="64" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="27" r="17" fill="#E8503F" stroke="#2B4A22" stroke-width="3"></circle><path d="M24 12 L19 5 L24 8 L29 5 Z M14 14 L24 11 L34 14 L24 15 Z" fill="#6FB34A" stroke="#2B4A22" stroke-width="2" stroke-linejoin="round"></path><circle cx="18" cy="27" r="2" fill="#2B4A22"></circle><circle cx="30" cy="27" r="2" fill="#2B4A22"></circle><circle cx="14" cy="32" r="2.5" fill="#F7A19A"></circle><circle cx="34" cy="32" r="2.5" fill="#F7A19A"></circle></svg>';
 
 // 입력값은 화면을 다시 그릴 때 속성이 아닌 값으로만 되돌린다. 비밀번호가 HTML에 남지 않게 한다.
-let auth = { mode: 'login', id: '', pw: '', pw2: '', errors: {} };
+let auth = { mode: 'login', email: '', pw: '', pw2: '', errors: {} };
 
 function readUsers() {
   try {
@@ -1562,15 +1562,20 @@ function writeUsers(users) {
   }
 }
 
+// 대문자로 입력해도 같은 이메일로 본다.
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
+
 // 입력 오류를 칸별로 돌려준다. 비어 있으면 통과다.
-function authErrors({ mode, id, pw, pw2 }, users) {
+function authErrors({ mode, email, pw, pw2 }, users) {
   const errors = {};
-  const trimmed = id.trim();
-  if (trimmed === '') errors.id = '아이디를 입력해 주세요.';
-  else if (!ID_PATTERN.test(trimmed)) errors.id = '영문과 숫자만 쓸 수 있어요.';
+  const normalized = normalizeEmail(email);
+  if (normalized === '') errors.email = '이메일을 입력해 주세요.';
+  else if (!EMAIL_PATTERN.test(normalized)) errors.email = '이메일 형식으로 입력해 주세요.';
   if (pw === '') errors.pw = '비밀번호를 입력해 주세요.';
   if (mode === 'signup') {
-    if (errors.id === undefined && Object.hasOwn(users, trimmed)) errors.id = '이미 있는 아이디예요.';
+    if (errors.email === undefined && Object.hasOwn(users, normalized)) errors.email = '이미 가입된 이메일이에요.';
     if (errors.pw === undefined && pw.length < PASSWORD_MIN) errors.pw = '비밀번호는 8자 이상으로 만들어 주세요.';
     if (pw2 === '') errors.pw2 = '비밀번호를 한 번 더 입력해 주세요.';
     else if (pw2 !== pw) errors.pw2 = '비밀번호가 서로 달라요.';
@@ -1599,7 +1604,7 @@ function authField(id, label, type, hint, error, autocomplete, red) {
   const note = error
     ? `<span class="err" role="alert">${escapeHtml(error)}</span>`
     : (hint ? `<span class="sub">${hint}</span>` : '');
-  const plain = type === 'text' ? ' autocapitalize="off" spellcheck="false"' : '';
+  const plain = type === 'email' ? ' autocapitalize="off" spellcheck="false"' : '';
   return `<div class="afield"><label for="${id}">${label}</label><input class="field" id="${id}" type="${type}" autocomplete="${autocomplete}"${plain}${invalid}>${note}</div>`;
 }
 
@@ -1607,9 +1612,9 @@ function renderAuth() {
   const { mode, errors } = auth;
   const login = mode === 'login';
   const fields = login
-    ? authField('a-id', '아이디', 'text', '', errors.id, 'username', errors.idRed)
+    ? authField('a-email', '이메일', 'email', '', errors.email, 'email', errors.emailRed)
       + authField('a-pw', '비밀번호', 'password', '', errors.pw, 'current-password')
-    : authField('a-id', '아이디', 'text', '영문과 숫자만 쓸 수 있어요', errors.id, 'username')
+    : authField('a-email', '이메일', 'email', '', errors.email, 'email')
       + authField('a-pw', '비밀번호', 'password', '8자 이상으로 만들어 주세요', errors.pw, 'new-password')
       + authField('a-pw2', '비밀번호 확인', 'password', '', errors.pw2, 'new-password');
   document.getElementById('authview').innerHTML = `<div class="auth-col">
@@ -1626,17 +1631,17 @@ function renderAuth() {
       </form>
     </main>
   </div>`;
-  document.getElementById('a-id').value = auth.id;
+  document.getElementById('a-email').value = auth.email;
   document.getElementById('a-pw').value = auth.pw;
   if (!login) document.getElementById('a-pw2').value = auth.pw2;
 }
 
 function showAuth(mode) {
-  auth = { mode, id: '', pw: '', pw2: '', errors: {} };
+  auth = { mode, email: '', pw: '', pw2: '', errors: {} };
   document.getElementById('app').hidden = true;
   document.getElementById('authview').hidden = false;
   renderAuth();
-  document.getElementById('a-id').focus();
+  document.getElementById('a-email').focus();
 }
 
 function showAuthErrors(errors) {
@@ -1672,26 +1677,26 @@ async function submitAuth() {
     showAuthErrors(errors);
     return;
   }
-  const id = auth.id.trim();
+  const email = normalizeEmail(auth.email);
   if (auth.mode === 'signup') {
     const salt = newSalt();
-    users[id] = { salt, passwordHash: await hashPassword(auth.pw, salt), createdAt: getToday() };
+    users[email] = { salt, passwordHash: await hashPassword(auth.pw, salt), createdAt: getToday() };
     const saved = writeUsers(users);
     document.getElementById('save-error').hidden = saved;
-    if (saved) enterAs(id);
+    if (saved) enterAs(email);
     return;
   }
-  const user = Object.hasOwn(users, id) ? users[id] : null;
+  const user = Object.hasOwn(users, email) ? users[email] : null;
   if (user === null || await hashPassword(auth.pw, user.salt) !== user.passwordHash) {
-    showAuthErrors({ pw: '아이디 또는 비밀번호가 맞지 않아요.', idRed: true });
+    showAuthErrors({ pw: '이메일 또는 비밀번호가 맞지 않아요.', emailRed: true });
     return;
   }
-  enterAs(id);
+  enterAs(email);
 }
 
 function handleAuthInput(event) {
   const { id, value } = event.target;
-  if (id === 'a-id') auth.id = value;
+  if (id === 'a-email') auth.email = value;
   if (id === 'a-pw') auth.pw = value;
   if (id === 'a-pw2') auth.pw2 = value;
 }

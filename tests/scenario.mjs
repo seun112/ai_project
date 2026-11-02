@@ -2,9 +2,9 @@
 const visible = `[...document.querySelectorAll('[data-panel]')].filter((p) => !p.hidden).map((p) => p.dataset.panel).join()`;
 const overflow = `document.documentElement.scrollWidth > document.documentElement.clientWidth`;
 const isHidden = (id) => `document.getElementById('${id}').hidden`;
-const raw = `localStorage.getItem(dataKey('tester'))`;
-const setRaw = (value) => `localStorage.setItem(dataKey('tester'), ${JSON.stringify(value)})`;
-const clearData = `localStorage.removeItem(dataKey('tester'))`;
+const raw = `localStorage.getItem(dataKey('tester@example.com'))`;
+const setRaw = (value) => `localStorage.setItem(dataKey('tester@example.com'), ${JSON.stringify(value)})`;
+const clearData = `localStorage.removeItem(dataKey('tester@example.com'))`;
 const type = (id, value) => `(() => { const el = document.getElementById('${id}'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
 const text = (id) => `document.getElementById('${id}').textContent`;
 const next = `document.getElementById('settle-next').click()`;
@@ -18,10 +18,10 @@ const enter = (selector) => `!document.querySelector('${selector}').dispatchEven
 
 // 이번 달을 정산 완료 상태로 만들어 정산 창 없이 앱에 들어간다.
 const seedSettled = `(() => {
-  const data = JSON.parse(localStorage.getItem(dataKey('tester')));
+  const data = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
   const allocations = Object.fromEntries(data.categories.map((c) => [c.id, 200000]));
   data.months[monthKeyOf(getToday())] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations, settled: true };
-  localStorage.setItem(dataKey('tester'), JSON.stringify(data));
+  localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(data));
 })()`;
 
 export default async function ({ evaluate, reload, size, shot, check, setToday }) {
@@ -38,7 +38,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   const authTab = (mode) => `document.querySelector('.auth-tabs [data-auth="${mode}"]').click()`;
   const authInvalid = (id) => `document.getElementById('${id}').getAttribute('aria-invalid') === 'true'`;
   const fillAuth = async (id, pw, pw2) => {
-    await evaluate(type('a-id', id));
+    await evaluate(type('a-email', id));
     await evaluate(type('a-pw', pw));
     if (pw2 !== undefined) await evaluate(type('a-pw2', pw2));
   };
@@ -47,37 +47,38 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   // 로그인 전: 로그인 화면만 보인다
   check('처음에는 로그인 화면', !(await evaluate(isHidden('authview'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
   check('로그인 안내 문구', (await evaluate(`document.querySelector('.auth-lead').textContent`)) === '로그인하고 이번 달 생활비를 관리해요');
-  check('아이디 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'a-id');
+  check('이메일 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'a-email');
   check('연습 계정 버튼 없음', !(await evaluate(`document.body.textContent`)).includes('연습 계정'));
   console.log('shot', await shot('login'));
   await evaluate(authSubmit);
-  check('빈 로그인: 두 칸 안내', (await evaluate(authErrors)) === '아이디를 입력해 주세요.|비밀번호를 입력해 주세요.', await evaluate(authErrors));
-  await fillAuth('한글id', 'password1');
+  check('빈 로그인: 두 칸 안내', (await evaluate(authErrors)) === '이메일을 입력해 주세요.|비밀번호를 입력해 주세요.', await evaluate(authErrors));
+  await fillAuth('tomato', 'password1');
   await evaluate(authSubmit);
-  check('로그인: 영문·숫자 외 문자 막힘', (await evaluate(authErrors)) === '영문과 숫자만 쓸 수 있어요.' && (await evaluate(authInvalid('a-id'))));
-  check('오류 칸으로 포커스', (await evaluate(`document.activeElement.id`)) === 'a-id');
-  await fillAuth('nobody', 'password1');
+  check('로그인: 이메일 형식이 아니면 막힘', (await evaluate(authErrors)) === '이메일 형식으로 입력해 주세요.' && (await evaluate(authInvalid('a-email'))));
+  check('오류 칸으로 포커스', (await evaluate(`document.activeElement.id`)) === 'a-email');
+  await fillAuth('nobody@example.com', 'password1');
   await evaluate(authSubmit);
-  check('없는 아이디: 로그인 실패 문구', await until(`${authErrors} === '아이디 또는 비밀번호가 맞지 않아요.'`));
-  check('로그인 실패: 두 칸 빨간 테두리', (await evaluate(authInvalid('a-id'))) && (await evaluate(authInvalid('a-pw'))));
+  check('없는 이메일: 로그인 실패 문구', await until(`${authErrors} === '이메일 또는 비밀번호가 맞지 않아요.'`));
+  check('로그인 실패: 두 칸 빨간 테두리', (await evaluate(authInvalid('a-email'))) && (await evaluate(authInvalid('a-pw'))));
 
   // 회원가입 오류
   await evaluate(authTab('signup'));
   check('회원가입 화면 전환', (await evaluate(`document.getElementById('a-pw2') !== null`)) && (await evaluate(`document.querySelector('.auth-lead').textContent`)) === '계정을 만들고 생활비 기록을 시작해요');
-  check('회원가입 안내 문구', (await evaluate(`document.querySelector('#authview').textContent`)).includes('영문과 숫자만 쓸 수 있어요') && (await evaluate(`document.querySelector('#authview').textContent`)).includes('8자 이상으로 만들어 주세요'));
+  check('회원가입 안내 문구', !(await evaluate(`document.querySelector('#authview').textContent`)).includes('영문과 숫자') && (await evaluate(`document.querySelector('#authview').textContent`)).includes('8자 이상으로 만들어 주세요'));
   console.log('shot', await shot('signup'));
   for (const [id, pw, pw2, message] of [
-    ['', '', '', '아이디를 입력해 주세요.|비밀번호를 입력해 주세요.|비밀번호를 한 번 더 입력해 주세요.'],
-    ['to mato', 'password1', 'password1', '영문과 숫자만 쓸 수 있어요.'],
-    ['tester', 'short', 'short', '비밀번호는 8자 이상으로 만들어 주세요.'],
-    ['tester', 'password1', '', '비밀번호를 한 번 더 입력해 주세요.'],
-    ['tester', 'password1', 'password2', '비밀번호가 서로 달라요.'],
+    ['', '', '', '이메일을 입력해 주세요.|비밀번호를 입력해 주세요.|비밀번호를 한 번 더 입력해 주세요.'],
+    ['to mato@example.com', 'password1', 'password1', '이메일 형식으로 입력해 주세요.'],
+    ['tomato@example', 'password1', 'password1', '이메일 형식으로 입력해 주세요.'],
+    ['tester@example.com', 'short', 'short', '비밀번호는 8자 이상으로 만들어 주세요.'],
+    ['tester@example.com', 'password1', '', '비밀번호를 한 번 더 입력해 주세요.'],
+    ['tester@example.com', 'password1', 'password2', '비밀번호가 서로 달라요.'],
   ]) {
     await fillAuth(id, pw, pw2);
     await evaluate(authSubmit);
     check(`가입 막힘: ${message}`, (await evaluate(authErrors)) === message, await evaluate(authErrors));
   }
-  check('오류 후에도 아이디 입력값 유지', (await evaluate(`document.getElementById('a-id').value`)) === 'tester');
+  check('오류 후에도 이메일 입력값 유지', (await evaluate(`document.getElementById('a-email').value`)) === 'tester@example.com');
   console.log('shot', await shot('signup-error'));
   check('비밀번호가 HTML에 남지 않음', !(await evaluate(`document.documentElement.outerHTML`)).includes('password1'));
   await size(400, 800);
@@ -85,12 +86,13 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await size(1200, 800);
 
   // 회원가입 성공: 바로 정산 창으로 들어간다
-  await fillAuth('tester', 'password1', 'password1');
+  await fillAuth('Tester@Example.COM', 'password1', 'password1');
   await evaluate(authSubmit);
   check('가입하면 바로 들어감', await until(appEntered));
+  check('대문자로 입력해도 소문자로 저장', (await evaluate(`Object.keys(JSON.parse(localStorage.getItem('living-budget-users'))).join()`)) === 'tester@example.com');
   const storedAll = await evaluate(`JSON.stringify({ ...localStorage })`);
   check('비밀번호 원문은 저장하지 않음', !storedAll.includes('password1'));
-  check('해시와 소금 저장', await evaluate(`(() => { const u = JSON.parse(localStorage.getItem('living-budget-users')).tester; return /^[0-9a-f]{64}$/.test(u.passwordHash) && /^[0-9a-f]{32}$/.test(u.salt); })()`));
+  check('해시와 소금 저장', await evaluate(`(() => { const u = JSON.parse(localStorage.getItem('living-budget-users'))['tester@example.com']; return /^[0-9a-f]{64}$/.test(u.passwordHash) && /^[0-9a-f]{32}$/.test(u.salt); })()`));
   check('로그아웃 버튼 없음', !/로그아웃/.test(await evaluate(`document.body.textContent`)));
 
   // 첫 접속: 앱 위에 정산 창이 뜬다
@@ -175,7 +177,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 5);
   await reload();
   check('새로고침 후 분류 id 유지', (await evaluate(raw)) === first);
-  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; localStorage.setItem(dataKey('tester'), JSON.stringify(d));`);
+  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));`);
   await reload();
   check('저장한 값이 새로고침 후 유지', (await evaluate(`state.piggy.balance`)) === 1234);
 
@@ -223,11 +225,11 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   // 지난달 남은 돈 처리
   await size(1200, 800);
   const seedLastMonth = (spent, piggy = 0) => `(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester')));
+    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
     d.months['2026-10'] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations: {}, settled: true };
     d.expenses.push({ id: 'old', date: '2026-10-05', categoryId: d.categories[0].id, amount: ${spent}, memo: '' });
     d.piggy.balance = ${piggy};
-    localStorage.setItem(dataKey('tester'), JSON.stringify(d));
+    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
   })()`;
   await setToday('2026-11-15');
   await evaluate(clearData);
@@ -420,9 +422,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(clearData);
   await reload();
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester')));
+    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
     d.expenses.push({ id: 'e1', date: '2026-10-03', categoryId: d.categories[0].id, amount: 1000, memo: '' });
-    localStorage.setItem(dataKey('tester'), JSON.stringify(d));
+    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
   })()`);
   await reload();
   await evaluate(type('base-amount', '100,000'));
@@ -560,16 +562,16 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('대시보드 400px 넘침 없음', !(await evaluate(overflow)));
   console.log('shot', await shot('dashboard-400'));
   await size(1200, 800);
-  await evaluate(`(() => { const d = JSON.parse(localStorage.getItem(dataKey('tester'))); d.piggy.balance = 150000; localStorage.setItem(dataKey('tester'), JSON.stringify(d)); })()`);
+  await evaluate(`(() => { const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com'))); d.piggy.balance = 150000; localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d)); })()`);
   await reload();
   check('저금통 잔액은 저장된 값', (await evaluate(text('piggy-balance'))) === '150,000원');
 
   // 이번 달 지출만 합산, 지난달 기록 잠금
   const remainBefore = await evaluate(text('month-remain'));
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester')));
+    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
     d.expenses.push({ id: 'last', date: '2026-10-20', categoryId: d.categories[0].id, amount: 999, memo: '지난달' });
-    localStorage.setItem(dataKey('tester'), JSON.stringify(d));
+    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
   })()`);
   await reload();
   check('지난달 지출은 합산하지 않음', (await evaluate(text('month-remain'))) === remainBefore);
@@ -594,7 +596,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(alloc(0, '1,000,000'));
   await evaluate(next);
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester')));
+    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
     const [food, cloth] = d.categories;
     d.months['2026-10'] = { baseAmount: 900000, carryIn: 0, deduction: 0, total: 900000, allocations: {}, settled: true };
     d.expenses.push(
@@ -603,7 +605,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
       { id: 'n3', date: '2026-11-14', categoryId: food.id, amount: 9000, memo: '점심' },
       { id: 'o1', date: '2026-10-20', categoryId: food.id, amount: 70000, memo: '모임' },
     );
-    localStorage.setItem(dataKey('tester'), JSON.stringify(d));
+    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
   })()`);
   await reload();
   const openTab = (name) => `document.querySelector('[data-view="${name}"]').click()`;
@@ -769,9 +771,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(alloc(1, '600,000'));
   await evaluate(next);
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester')));
+    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
     d.expenses.push({ id: 's1', date: '2026-11-03', categoryId: d.categories[0].id, amount: 450000, memo: '식비' });
-    localStorage.setItem(dataKey('tester'), JSON.stringify(d));
+    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
   })()`);
   await reload();
   const setAlloc = (i, val) => `(() => { const el = document.querySelectorAll('[data-set-alloc]')[${i}]; el.value = ${JSON.stringify(val)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
@@ -886,23 +888,23 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await closeBrowser();
   check('브라우저를 닫으면 로그인 화면', !(await evaluate(isHidden('authview'))) && (await evaluate(isHidden('app'))));
   check('로그인 전에는 데이터가 화면에 없음', !(await evaluate(`document.body.textContent`)).includes('테스터 지출'));
-  await fillAuth('tester', 'wrongpass1');
+  await fillAuth('tester@example.com', 'wrongpass1');
   await evaluate(authSubmit);
-  check('틀린 비밀번호: 로그인 실패 문구', await until(`${authErrors} === '아이디 또는 비밀번호가 맞지 않아요.'`));
+  check('틀린 비밀번호: 로그인 실패 문구', await until(`${authErrors} === '이메일 또는 비밀번호가 맞지 않아요.'`));
   check('틀린 비밀번호: 들어가지 못함', (await evaluate(isHidden('app'))));
-  await fillAuth('tester', 'password1');
+  await fillAuth('TESTER@example.com', 'password1');
   await evaluate(authSubmit);
-  check('맞는 비밀번호로 로그인', await until(appEntered));
+  check('대문자가 섞여도 같은 계정으로 로그인', await until(appEntered));
   check('로그인하면 정산 끝난 달은 대시보드', (await evaluate(isHidden('overlay'))) && (await evaluate(visible)) === 'dashboard');
   check('로그인하면 내 데이터 표시', (await evaluate(text('today-spent'))) === '12,000원');
 
   // 계정별 데이터 분리
   await closeBrowser();
   await evaluate(authTab('signup'));
-  await fillAuth('tester', 'password1', 'password1');
+  await fillAuth('TESTER@example.com', 'password1', 'password1');
   await evaluate(authSubmit);
-  check('이미 있는 아이디: 가입 막힘', (await evaluate(authErrors)) === '이미 있는 아이디예요.', await evaluate(authErrors));
-  await fillAuth('Other2', 'password2', 'password2');
+  check('이미 가입된 이메일: 가입 막힘', (await evaluate(authErrors)) === '이미 가입된 이메일이에요.', await evaluate(authErrors));
+  await fillAuth('other2@example.com', 'password2', 'password2');
   await evaluate(authSubmit);
   check('다른 계정 가입', await until(appEntered));
   check('다른 계정은 처음 쓰는 달로 시작', !(await evaluate(isHidden('overlay'))) && !(await evaluate(isHidden('first-notice'))));
@@ -912,9 +914,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   check('다른 계정에는 내 지출이 없음', (await evaluate(text('today-spent'))) === '0원');
   await enterExpense('3,000', '다른 계정 지출');
-  check('다른 계정의 저장 위치가 따로 있음', (await evaluate(`localStorage.getItem(dataKey('Other2')) !== null`)) && (await evaluate(raw)) === testerData);
+  check('다른 계정의 저장 위치가 따로 있음', (await evaluate(`localStorage.getItem(dataKey('other2@example.com')) !== null`)) && (await evaluate(raw)) === testerData);
   await closeBrowser();
-  await fillAuth('tester', 'password1');
+  await fillAuth('tester@example.com', 'password1');
   await evaluate(authSubmit);
   await until(appEntered);
   check('다시 로그인하면 내 데이터만', (await evaluate(text('today-spent'))) === '12,000원' && !(await evaluate(`document.body.textContent`)).includes('다른 계정 지출'));
@@ -922,10 +924,10 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   // 저장된 데이터가 손상된 계정
   await closeBrowser();
   await evaluate(setRaw('{broken'));
-  await fillAuth('tester', 'password1');
+  await fillAuth('tester@example.com', 'password1');
   await evaluate(authSubmit);
   check('손상된 계정: 복구 화면', await until(`!document.getElementById('recovery').hidden`));
   check('손상된 계정: 앱 숨김', (await evaluate(isHidden('app'))) && (await evaluate(isHidden('authview'))));
-  check('손상된 계정: 다른 계정 데이터는 그대로', await evaluate(`localStorage.getItem(dataKey('Other2')) !== null`));
+  check('손상된 계정: 다른 계정 데이터는 그대로', await evaluate(`localStorage.getItem(dataKey('other2@example.com')) !== null`));
   await setToday(null);
 }
