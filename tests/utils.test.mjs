@@ -680,7 +680,7 @@ test('flushSaves: 순서대로 하나씩 보내고 실패분은 다시 보낸다
 
   const done = vm.runInContext(`state.piggy.balance = 1; flushSaves(); state.piggy.balance = 2; flushSaves(); state.piggy.balance = 3; flushSaves();`, t.ctx);
   await done;
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  while (t.call('saving')) await new Promise((resolve) => setTimeout(resolve, 1));
   assert.equal(t.call('overlap'), false, '동시에 보내지 않음');
   assert.deepEqual(t.call('sent').map((c) => c.piggy_balance), [1, 3], '중간 값은 묶고 마지막 값이 마지막에 도착');
 
