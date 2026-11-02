@@ -2,9 +2,9 @@
 const visible = `[...document.querySelectorAll('[data-panel]')].filter((p) => !p.hidden).map((p) => p.dataset.panel).join()`;
 const overflow = `document.documentElement.scrollWidth > document.documentElement.clientWidth`;
 const isHidden = (id) => `document.getElementById('${id}').hidden`;
-const raw = `localStorage.getItem(dataKey('tester@example.com'))`;
-const setRaw = (value) => `localStorage.setItem(dataKey('tester@example.com'), ${JSON.stringify(value)})`;
-const clearData = `localStorage.removeItem(dataKey('tester@example.com'))`;
+const raw = `fakeRead('tester@example.com')`;
+const setRaw = (value) => `fakeWrite('tester@example.com', ${JSON.stringify(value)})`;
+const clearData = `fakeClear('tester@example.com')`;
 const type = (id, value) => `(() => { const el = document.getElementById('${id}'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
 const text = (id) => `document.getElementById('${id}').textContent`;
 const next = `document.getElementById('settle-next').click()`;
@@ -18,13 +18,13 @@ const enter = (selector) => `!document.querySelector('${selector}').dispatchEven
 
 // 이번 달을 정산 완료 상태로 만들어 정산 창 없이 앱에 들어간다.
 const seedSettled = `(() => {
-  const data = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+  const data = JSON.parse(fakeRead('tester@example.com'));
   const allocations = Object.fromEntries(data.categories.map((c) => [c.id, 200000]));
   data.months[monthKeyOf(getToday())] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations, settled: true };
-  localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(data));
+  fakeWrite('tester@example.com', JSON.stringify(data));
 })()`;
 
-export default async function ({ evaluate, reload, size, shot, check, setToday }) {
+export default async function ({ evaluate, reload: reloadPage, size, shot, check, setToday }) {
   // 서버 응답은 비동기라서 화면이 바뀔 때까지 기다린다.
   const until = async (expression) => {
     for (let i = 0; i < 200; i++) {
@@ -32,6 +32,11 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     return false;
+  };
+  const settled = `['authview', 'app', 'recovery'].some((id) => !document.getElementById(id).hidden)`;
+  const reload = async () => {
+    await reloadPage();
+    await until(settled);
   };
   const authErrors = `[...document.querySelectorAll('#authview .err')].map((e) => e.textContent).join('|')`;
   const authSubmit = `document.querySelector('#auth-form button[type="submit"]').click()`;
@@ -45,7 +50,8 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   const appEntered = `document.getElementById('authview').hidden && !document.getElementById('app').hidden`;
 
   // 로그인 전: 로그인 화면만 보인다
-  check('처음에는 로그인 화면', !(await evaluate(isHidden('authview'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
+  await until(settled);
+  check('처음에는 로그인 화면',!(await evaluate(isHidden('authview'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
   check('로그인 안내 문구', (await evaluate(`document.querySelector('.auth-lead').textContent`)) === '로그인하고 이번 달 생활비를 관리해요');
   check('이메일 칸에 포커스', (await evaluate(`document.activeElement.id`)) === 'a-email');
   check('연습 계정 버튼 없음', !(await evaluate(`document.body.textContent`)).includes('연습 계정'));
@@ -177,7 +183,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('기본 분류가 저장되어 있음', first !== null && JSON.parse(first).categories.length === 5);
   await reload();
   check('새로고침 후 분류 id 유지', (await evaluate(raw)) === first);
-  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));`);
+  await evaluate(`const d = JSON.parse(${raw}); d.piggy.balance = 1234; fakeWrite('tester@example.com', JSON.stringify(d));`);
   await reload();
   check('저장한 값이 새로고침 후 유지', (await evaluate(`state.piggy.balance`)) === 1234);
 
@@ -187,49 +193,44 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('400px 가로 넘침 없음', !(await evaluate(overflow)));
   console.log('shot', await shot('narrow'));
 
-  // 손상 데이터
-  for (const [label, value] of [['깨진 JSON', '{broken'], ['다른 버전', JSON.stringify({ version: 99 })]]) {
-    await evaluate(setRaw(value));
-    await reload();
-    check(`${label}: 복구 화면 표시`, !(await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
-    check(`${label}: 원본 유지`, (await evaluate(raw)) === value);
-  }
+  // 불러오기 실패
+  const beforeFail = await evaluate(raw);
+  const retry = `document.getElementById('retry-load').click()`;
+  await evaluate(`localStorage.setItem('fake-supabase-fail', 'load')`);
+  await reload();
+  check('불러오기 실패 화면 표시', !(await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))) && (await evaluate(isHidden('overlay'))));
+  check('불러오기 실패 문구', (await evaluate(`document.querySelector('#recovery h1').textContent`)) === '데이터를 불러오지 못했어요');
+  check('버튼은 다시 시도 하나뿐', (await evaluate(`[...document.querySelectorAll('#recovery button')].map((b) => b.textContent).join()`)) === '다시 시도');
+  check('데이터 초기화 없음', !(await evaluate(`document.body.textContent`)).includes('초기화'));
   console.log('shot', await shot('recovery'));
-  check('복구 화면 400px 넘침 없음', !(await evaluate(overflow)));
-
-  await evaluate(`document.getElementById('reset-start').click()`);
-  check('초기화 첫 클릭은 확인만 표시', !(await evaluate(isHidden('reset-confirm'))));
-  check('첫 클릭으로 데이터가 지워지지 않음', JSON.parse(await evaluate(raw)).version === 99);
-  await evaluate(`document.getElementById('reset-cancel').click()`);
-  check('취소하면 확인이 닫힘', await evaluate(isHidden('reset-confirm')));
-  check('취소해도 데이터 유지', JSON.parse(await evaluate(raw)).version === 99);
-
-  await evaluate(`document.getElementById('reset-start').click()`);
-  console.log('shot', await shot('recovery-confirm'));
-  await evaluate(`document.getElementById('reset-run').click()`);
-  check('초기화 후 정산 창 표시', !(await evaluate(isHidden('overlay'))) && (await evaluate(isHidden('recovery'))));
-  const after = JSON.parse(await evaluate(raw));
-  check('초기화 후 빈 데이터 저장', after.version === 1 && after.categories.length === 5 && after.piggy.balance === 0);
-  await reload();
-  await reload();
-  check('초기화 후 새로고침해도 정산 창 표시', !(await evaluate(isHidden('overlay'))));
+  check('불러오기 실패 화면 400px 넘침 없음', !(await evaluate(overflow)));
+  check('다시 시도 중에는 버튼 비활성', await evaluate(`${retry}; document.getElementById('retry-load').disabled`));
+  await until(`!document.getElementById('retry-load').disabled`);
+  check('계속 실패하면 그대로 안내', !(await evaluate(isHidden('recovery'))) && (await evaluate(isHidden('app'))));
+  check('실패해도 서버 데이터를 덮어쓰지 않음', (await evaluate(raw)) === beforeFail);
+  await evaluate(`localStorage.removeItem('fake-supabase-fail')`);
+  await evaluate(retry);
+  check('다시 시도하면 앱으로 들어감', await until(`document.getElementById('recovery').hidden && !document.getElementById('app').hidden`));
+  check('다시 시도하면 내 데이터 표시', (await evaluate(`state.piggy.balance`)) === 1234);
 
   // 저장 실패 안내
-  await evaluate(`Storage.prototype.setItem = () => { throw new Error('quota'); }; saveState();`);
-  check('저장 실패 안내 표시', !(await evaluate(isHidden('save-error'))));
+  await evaluate(`localStorage.setItem('fake-supabase-fail', 'save'); state.piggy.balance = 1500; saveState();`);
+  check('저장 실패 안내 표시', await until(`!document.getElementById('save-error').hidden`));
+  check('저장 실패 문구', (await evaluate(text('save-error'))).startsWith('저장하지 못했습니다.'));
   console.log('shot', await shot('save-error'));
-  await reload();
-  await evaluate(`saveState();`);
-  check('저장 성공하면 안내 사라짐', await evaluate(isHidden('save-error')));
+  check('실패하면 서버 값은 그대로', JSON.parse(await evaluate(raw)).piggy.balance === 1234);
+  await evaluate(`localStorage.removeItem('fake-supabase-fail'); dispatchEvent(new Event('online'));`);
+  check('인터넷이 돌아오면 다시 보내고 안내 사라짐', await until(`document.getElementById('save-error').hidden`));
+  check('못 보낸 변경이 서버에 저장됨', JSON.parse(await evaluate(raw)).piggy.balance === 1500);
 
   // 지난달 남은 돈 처리
   await size(1200, 800);
   const seedLastMonth = (spent, piggy = 0) => `(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+    const d = JSON.parse(fakeRead('tester@example.com'));
     d.months['2026-10'] = { baseAmount: 1000000, carryIn: 0, deduction: 0, total: 1000000, allocations: {}, settled: true };
     d.expenses.push({ id: 'old', date: '2026-10-05', categoryId: d.categories[0].id, amount: ${spent}, memo: '' });
     d.piggy.balance = ${piggy};
-    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
+    fakeWrite('tester@example.com', JSON.stringify(d));
   })()`;
   await setToday('2026-11-15');
   await evaluate(clearData);
@@ -422,9 +423,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(clearData);
   await reload();
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+    const d = JSON.parse(fakeRead('tester@example.com'));
     d.expenses.push({ id: 'e1', date: '2026-10-03', categoryId: d.categories[0].id, amount: 1000, memo: '' });
-    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
+    fakeWrite('tester@example.com', JSON.stringify(d));
   })()`);
   await reload();
   await evaluate(type('base-amount', '100,000'));
@@ -562,16 +563,16 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   check('대시보드 400px 넘침 없음', !(await evaluate(overflow)));
   console.log('shot', await shot('dashboard-400'));
   await size(1200, 800);
-  await evaluate(`(() => { const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com'))); d.piggy.balance = 150000; localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d)); })()`);
+  await evaluate(`(() => { const d = JSON.parse(fakeRead('tester@example.com')); d.piggy.balance = 150000; fakeWrite('tester@example.com', JSON.stringify(d)); })()`);
   await reload();
   check('저금통 잔액은 저장된 값', (await evaluate(text('piggy-balance'))) === '150,000원');
 
   // 이번 달 지출만 합산, 지난달 기록 잠금
   const remainBefore = await evaluate(text('month-remain'));
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+    const d = JSON.parse(fakeRead('tester@example.com'));
     d.expenses.push({ id: 'last', date: '2026-10-20', categoryId: d.categories[0].id, amount: 999, memo: '지난달' });
-    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
+    fakeWrite('tester@example.com', JSON.stringify(d));
   })()`);
   await reload();
   check('지난달 지출은 합산하지 않음', (await evaluate(text('month-remain'))) === remainBefore);
@@ -596,7 +597,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(alloc(0, '1,000,000'));
   await evaluate(next);
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+    const d = JSON.parse(fakeRead('tester@example.com'));
     const [food, cloth] = d.categories;
     d.months['2026-10'] = { baseAmount: 900000, carryIn: 0, deduction: 0, total: 900000, allocations: {}, settled: true };
     d.expenses.push(
@@ -605,7 +606,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
       { id: 'n3', date: '2026-11-14', categoryId: food.id, amount: 9000, memo: '점심' },
       { id: 'o1', date: '2026-10-20', categoryId: food.id, amount: 70000, memo: '모임' },
     );
-    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
+    fakeWrite('tester@example.com', JSON.stringify(d));
   })()`);
   await reload();
   const openTab = (name) => `document.querySelector('[data-view="${name}"]').click()`;
@@ -711,7 +712,7 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(type('cn-memo', '빠뜨린 지출'));
   await evaluate(calBtn('cal-add-category', 2));
   await evaluate(calBtn('cal-add'));
-  const addedOne = (await expenses()).at(-1);
+  const addedOne = (await expenses()).find((expense) => expense.memo === '빠뜨린 지출');
   check('고른 날짜로 추가', (await expenses()).length === countAdd + 1 && addedOne.date === '2026-11-05' && addedOne.amount === 20000 && addedOne.memo === '빠뜨린 지출');
   check('고른 분류로 추가', (await evaluate(`state.categories[2].id`)) === addedOne.categoryId);
   check('추가가 칸 합계와 내역에 바로 반영', (await evaluate(dayText('2026-11-05'))) === '520,000원' && (await evaluate(`document.querySelectorAll('#day-list .line').length`)) === 1);
@@ -771,9 +772,9 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(alloc(1, '600,000'));
   await evaluate(next);
   await evaluate(`(() => {
-    const d = JSON.parse(localStorage.getItem(dataKey('tester@example.com')));
+    const d = JSON.parse(fakeRead('tester@example.com'));
     d.expenses.push({ id: 's1', date: '2026-11-03', categoryId: d.categories[0].id, amount: 450000, memo: '식비' });
-    localStorage.setItem(dataKey('tester@example.com'), JSON.stringify(d));
+    fakeWrite('tester@example.com', JSON.stringify(d));
   })()`);
   await reload();
   const setAlloc = (i, val) => `(() => { const el = document.querySelectorAll('[data-set-alloc]')[${i}]; el.value = ${JSON.stringify(val)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
@@ -933,20 +934,20 @@ export default async function ({ evaluate, reload, size, shot, check, setToday }
   await evaluate(next);
   check('다른 계정에는 내 지출이 없음', (await evaluate(text('today-spent'))) === '0원');
   await enterExpense('3,000', '다른 계정 지출');
-  check('다른 계정의 저장 위치가 따로 있음', (await evaluate(`localStorage.getItem(dataKey('other2@example.com')) !== null`)) && (await evaluate(raw)) === testerData);
+  check('다른 계정의 저장 위치가 따로 있음', (await evaluate(`fakeRead('other2@example.com') !== null`)) && (await evaluate(raw)) === testerData);
   await closeBrowser();
   await fillAuth('tester@example.com', 'password1');
   await evaluate(authSubmit);
   await until(appEntered);
   check('다시 로그인하면 내 데이터만', (await evaluate(text('today-spent'))) === '12,000원' && !(await evaluate(`document.body.textContent`)).includes('다른 계정 지출'));
 
-  // 저장된 데이터가 손상된 계정
+  // 로그인 직후 불러오기 실패
   await closeBrowser();
-  await evaluate(setRaw('{broken'));
+  await evaluate(`localStorage.setItem('fake-supabase-fail', 'load')`);
   await fillAuth('tester@example.com', 'password1');
   await evaluate(authSubmit);
-  check('손상된 계정: 복구 화면', await until(`!document.getElementById('recovery').hidden`));
-  check('손상된 계정: 앱 숨김', (await evaluate(isHidden('app'))) && (await evaluate(isHidden('authview'))));
-  check('손상된 계정: 다른 계정 데이터는 그대로', await evaluate(`localStorage.getItem(dataKey('other2@example.com')) !== null`));
+  check('로그인 후 불러오기 실패: 안내 화면', await until(`!document.getElementById('recovery').hidden`));
+  check('로그인 후 불러오기 실패: 앱 숨김', (await evaluate(isHidden('app'))) && (await evaluate(isHidden('authview'))));
+  await evaluate(`localStorage.removeItem('fake-supabase-fail')`);
   await setToday(null);
 }

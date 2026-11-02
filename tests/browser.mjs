@@ -91,7 +91,7 @@ await send('Network.setBlockedURLs', { urls: ['*cdn.jsdelivr.net*'] });
 await send('Page.addScriptToEvaluateOnNewDocument', { source: readFileSync(join(here, 'fake-supabase.js'), 'utf8') });
 await size(1200, 800);
 await open();
-await evaluate('localStorage.clear()');
+await evaluate('localStorage.clear(); sessionStorage.clear();');
 await reload();
 
 const scenario = await import(pathToFileURL(join(here, 'scenario.mjs')).href);
@@ -99,6 +99,7 @@ try {
   await scenario.default({ evaluate, reload, size, shot, check, setToday });
   check('콘솔 오류 없음', problems.length === 0, problems.join(' | '));
 } finally {
+  if (problems.length > 0) console.log('콘솔 오류:', problems.join(' | '));
   ws.close();
   proc.kill();
   await new Promise((r) => setTimeout(r, 500));

@@ -182,13 +182,11 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
   .cal-nav h2 { font-size: 21px; min-width: 6.5em; }
 }
 
-/* 목업에 없는 화면: 저장 실패 안내와 손상 데이터 복구 */
-.save-error { margin: 0; padding: 12px 16px; background: var(--seal); color: var(--paper); text-align: center; }
+/* 목업에 없는 화면: 저장 실패 안내와 불러오기 실패 */
+.save-error { margin: 0; padding: 12px 16px; background: var(--seal); color: var(--paper); text-align: center; word-break: keep-all; }
 .recovery { width: calc(100% - 32px); max-width: 560px; margin: 64px auto; word-break: keep-all; }
 .recovery .inner { display: block; }
 .recovery h1 { margin: 0 0 12px; font-family: 'Jua', 'Gowun Dodum', sans-serif; font-weight: 400; font-size: 28px; line-height: 1.3; }
-.recovery p { margin: 0 0 20px; }
-.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* 목업의 인라인 스타일을 옮긴 것 */
 .panel { flex: 1 1 100%; min-width: 0; }
@@ -254,22 +252,14 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 </style>
 </head>
 <body>
-  <p class="save-error" id="save-error" role="alert" hidden>저장하지 못했습니다. 브라우저 저장 공간을 확인한 뒤 다시 시도하세요.</p>
+  <p class="save-error" id="save-error" role="alert" hidden>저장하지 못했습니다. 인터넷 연결을 확인해 주세요. 이대로 창을 닫으면 입력한 내용이 사라질 수 있어요.</p>
 
   <div class="auth" id="authview" hidden></div>
 
   <section class="recovery book" id="recovery" hidden>
     <div class="inner">
-      <h1>저장된 데이터를 읽을 수 없습니다</h1>
-      <p>데이터가 손상되었거나 지원하지 않는 형식입니다. 저장된 원본은 지우지 않았습니다.</p>
-      <button class="btn" id="reset-start" type="button">데이터 초기화</button>
-      <div id="reset-confirm" role="alert" hidden>
-        <p>모든 데이터가 삭제되고 되돌릴 수 없습니다.</p>
-        <div class="btn-row">
-          <button class="btn go" id="reset-run" type="button">모두 삭제하고 새로 시작</button>
-          <button class="btn" id="reset-cancel" type="button">취소</button>
-        </div>
-      </div>
+      <h1>데이터를 불러오지 못했어요</h1>
+      <button class="btn" id="retry-load" type="button">다시 시도</button>
     </div>
   </section>
 
@@ -372,10 +362,9 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 // 공개용 키라서 저장소에 둔다. 사용자별 접근 제한은 Row Level Security가 맡는다.
 const SUPABASE_URL = 'https://kqqveotykeuyffrlhrxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_1XpOuFjG5GUXEROTHBHaAQ_j9iU3hwD';
-const STORAGE_KEY = 'living-budget';
+const PAGE_SIZE = 1000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
-const DATA_VERSION = 1;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
 const CATEGORY_NAME_MAX = 10;
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -483,20 +472,19 @@ function formatMonth(monthKey) {
 // ---- 저장소 ----
 
 let state = null;
-let currentUser = null;
+let synced = null;
+let saving = false;
+let saveAgain = false;
+let idCount = 0;
 
-// 계정마다 따로 저장한다. T9에서 DB로 바꾸면 이 키는 쓰지 않는다.
-function dataKey(userId) {
-  return `${STORAGE_KEY}:${userId}`;
-}
-
+// DB에는 표시 순서 칸이 없어서 id 순서가 곧 만든 순서다. 같은 1ms에 만든 id는 번호로 순서를 지킨다.
 function createId(prefix) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  idCount += 1;
+  return `${prefix}-${Date.now().toString(36)}-${String(idCount).padStart(4, '0')}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createEmptyData() {
   return {
-    version: DATA_VERSION,
     categories: DEFAULT_CATEGORIES.map((name) => ({ id: createId('cat'), name, hidden: false })),
     months: {},
     expenses: [],
@@ -505,59 +493,140 @@ function createEmptyData() {
   };
 }
 
-function isPlainObject(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+// DB 행(snake_case)을 화면에서 쓰는 데이터로 바꾼다.
+function rowsToData({ categories, months, expenses, piggy, piggy_history: history, unsettled }) {
+  const byId = (a, b) => (a.id < b.id ? -1 : 1);
+  return {
+    categories: categories.map(({ id, name, hidden }) => ({ id, name, hidden })).sort(byId),
+    months: Object.fromEntries(months.map((row) => [row.month, {
+      baseAmount: row.base_amount,
+      carryIn: row.carry_in,
+      deduction: row.deduction,
+      total: row.total,
+      allocations: row.allocations,
+      settled: row.settled,
+      skipped: row.skipped,
+    }])),
+    expenses: expenses.map(({ id, date, category_id: categoryId, amount, memo }) => ({ id, date, categoryId, amount, memo })).sort(byId),
+    piggy: {
+      balance: piggy[0].balance,
+      history: history.map(({ id, date, type, amount, memo }) => ({ id, date, type, amount, memo })).sort(byId),
+    },
+    unsettled: unsettled.map(({ month, amount }) => ({ month, amount })),
+  };
 }
 
-function isValidCategory(category) {
-  return isPlainObject(category)
-    && typeof category.id === 'string'
-    && typeof category.name === 'string'
-    && typeof category.hidden === 'boolean';
+// 저장할 행으로 바꾼다. 칸 순서가 늘 같아서 JSON 문자열로 비교할 수 있다.
+function dataToRows(data) {
+  return {
+    categories: data.categories.map(({ id, name, hidden }) => ({ id, name, hidden })),
+    months: Object.entries(data.months).map(([month, row]) => ({
+      month,
+      base_amount: row.baseAmount,
+      carry_in: row.carryIn,
+      deduction: row.deduction,
+      total: row.total,
+      allocations: row.allocations,
+      settled: row.settled,
+      skipped: row.skipped === true,
+    })),
+    expenses: data.expenses.map(({ id, date, categoryId, amount, memo }) => ({ id, date, category_id: categoryId, amount, memo })),
+    piggy_balance: data.piggy.balance,
+    piggy_history: data.piggy.history.map(({ id, date, type, amount, memo }) => ({ id, date, type, amount, memo })),
+    unsettled: data.unsettled.map(({ month, amount }) => ({ month, amount })),
+  };
 }
 
-function isValidData(data) {
-  return isPlainObject(data)
-    && data.version === DATA_VERSION
-    && Array.isArray(data.categories)
-    && data.categories.every(isValidCategory)
-    && isPlainObject(data.months)
-    && Array.isArray(data.expenses)
-    && isPlainObject(data.piggy)
-    && Number.isSafeInteger(data.piggy.balance)
-    && Array.isArray(data.piggy.history)
-    && Array.isArray(data.unsettled);
+function emptyRows() {
+  return { categories: [], months: [], expenses: [], piggy_balance: null, piggy_history: [], unsettled: [] };
 }
 
-// 손상된 값은 읽기만 하고 덮어쓰지 않는다. 지우는 것은 사용자가 고른다.
-function loadData(userId) {
-  let raw = null;
-  try {
-    raw = localStorage.getItem(dataKey(userId));
-  } catch {
-    return { status: 'empty', data: createEmptyData() };
+function changedRows(before, after, key) {
+  const known = new Map(before.map((row) => [row[key], JSON.stringify(row)]));
+  return after.filter((row) => known.get(row[key]) !== JSON.stringify(row));
+}
+
+function removedIds(before, after) {
+  const kept = new Set(after.map(({ id }) => id));
+  return before.filter(({ id }) => !kept.has(id)).map(({ id }) => id);
+}
+
+// 마지막으로 서버에 저장된 행과 비교해 바뀐 행만 고른다. months, piggy_history, unsettled는 지우는 기능이 없다.
+function diffRows(before, after) {
+  const changes = {
+    categories: changedRows(before.categories, after.categories, 'id'),
+    months: changedRows(before.months, after.months, 'month'),
+    expenses: changedRows(before.expenses, after.expenses, 'id'),
+    deleted_expenses: removedIds(before.expenses, after.expenses),
+    deleted_categories: removedIds(before.categories, after.categories),
+    piggy_history: changedRows(before.piggy_history, after.piggy_history, 'id'),
+    unsettled: changedRows(before.unsettled, after.unsettled, 'month'),
+  };
+  for (const [key, rows] of Object.entries(changes)) {
+    if (rows.length === 0) delete changes[key];
   }
-  if (raw === null) return { status: 'empty', data: createEmptyData() };
+  if (before.piggy_balance !== after.piggy_balance) changes.piggy_balance = after.piggy_balance;
+  return changes;
+}
 
-  try {
-    const data = JSON.parse(raw);
-    return isValidData(data) ? { status: 'ok', data } : { status: 'corrupt' };
-  } catch {
-    return { status: 'corrupt' };
+// Supabase는 한 번에 1000행까지만 돌려준다. 지출이 쌓여도 전부 받도록 나눠서 읽는다.
+async function fetchAll(table, order) {
+  const rows = [];
+  for (;;) {
+    const { data, error } = await db().from(table).select('*').order(order).range(rows.length, rows.length + PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) return rows;
   }
 }
 
-function saveData(userId, data) {
+// 첫 저장은 저금통 행까지 한 번에 들어간다. 저금통 행이 없으면 아직 아무것도 저장되지 않은 계정이다.
+async function loadData() {
   try {
-    localStorage.setItem(dataKey(userId), JSON.stringify(data));
-    return true;
+    const [categories, months, expenses, piggy, history, unsettled] = await Promise.all([
+      fetchAll('categories', 'id'),
+      fetchAll('months', 'month'),
+      fetchAll('expenses', 'id'),
+      fetchAll('piggy', 'user_id'),
+      fetchAll('piggy_history', 'id'),
+      fetchAll('unsettled', 'month'),
+    ]);
+    if (piggy.length === 0) return { status: 'empty', data: createEmptyData() };
+    return { status: 'ok', data: rowsToData({ categories, months, expenses, piggy, piggy_history: history, unsettled }) };
+  } catch {
+    return { status: 'failed' };
+  }
+}
+
+async function saveData(changes) {
+  try {
+    const { error } = await db().rpc('save_changes', { changes });
+    return !error;
   } catch {
     return false;
   }
 }
 
+// 저장은 한 번에 하나씩 순서대로 보낸다. 실패한 변경은 synced에 반영되지 않아 다음 저장 때 함께 간다.
+async function flushSaves() {
+  if (saving) {
+    saveAgain = true;
+    return;
+  }
+  saving = true;
+  do {
+    saveAgain = false;
+    const target = dataToRows(state);
+    const changes = diffRows(synced, target);
+    const saved = Object.keys(changes).length === 0 || await saveData(changes);
+    if (saved) synced = target;
+    document.getElementById('save-error').hidden = saved;
+  } while (saveAgain);
+  saving = false;
+}
+
 function saveState() {
-  document.getElementById('save-error').hidden = saveData(currentUser, state);
+  flushSaves();
 }
 
 // ---- 정산 ----
@@ -1646,16 +1715,15 @@ function showAuthErrors(errors) {
   document.querySelector('#authview [aria-invalid="true"]')?.focus();
 }
 
-function enterAs(userId) {
-  currentUser = userId;
+// 불러오는 동안에는 지금 화면을 그대로 둔다. 실패하면 새 데이터로 덮어쓰지 않도록 앱에 들어가지 않는다.
+async function enterApplication() {
+  const { status, data } = await loadData();
   document.getElementById('authview').hidden = true;
-  const result = loadData(userId);
-  if (result.status === 'corrupt') {
-    showRecovery();
-    return;
-  }
-  state = result.data;
-  if (result.status === 'empty') saveState();
+  document.getElementById('recovery').hidden = status !== 'failed';
+  if (status === 'failed') return;
+  state = data;
+  synced = status === 'empty' ? emptyRows() : dataToRows(data);
+  if (status === 'empty') saveState();
   enterApp();
   showView('dashboard');
 }
@@ -1670,9 +1738,12 @@ async function submitAuth() {
   auth.busy = true;
   document.querySelector('#auth-form button[type="submit"]').disabled = true;
   const { userId, code } = await requestAuth(auth);
+  if (userId !== undefined) {
+    await enterApplication();
+    return;
+  }
   auth.busy = false;
-  if (userId === undefined) showAuthErrors(authServerErrors(code, auth.mode));
-  else enterAs(userId);
+  showAuthErrors(authServerErrors(code, auth.mode));
 }
 
 function handleAuthInput(event) {
@@ -1707,13 +1778,11 @@ function showView(name) {
   if (name === 'settings') openSettings();
 }
 
-function showRecovery() {
-  document.getElementById('recovery').hidden = false;
-}
-
-function setResetConfirm(open) {
-  document.getElementById('reset-start').hidden = open;
-  document.getElementById('reset-confirm').hidden = !open;
+async function retryLoad() {
+  const button = document.getElementById('retry-load');
+  button.disabled = true;
+  await enterApplication();
+  button.disabled = false;
 }
 
 // 이번 달이 정산되지 않았으면 앱 위에 정산 창을 띄운다. 끝내기 전에는 뒤의 앱을 쓸 수 없다.
@@ -1730,20 +1799,11 @@ function enterApp() {
   renderDashboard();
 }
 
-function resetData() {
-  state = createEmptyData();
-  saveState();
-  document.getElementById('recovery').hidden = true;
-  enterApp();
-}
-
 async function init() {
   document.querySelectorAll('[data-view]').forEach((item) => {
     item.addEventListener('click', () => showView(item.dataset.view));
   });
-  document.getElementById('reset-start').addEventListener('click', () => setResetConfirm(true));
-  document.getElementById('reset-cancel').addEventListener('click', () => setResetConfirm(false));
-  document.getElementById('reset-run').addEventListener('click', resetData);
+  document.getElementById('retry-load').addEventListener('click', retryLoad);
   document.getElementById('settle-form').addEventListener('submit', handleSettleSubmit);
   document.getElementById('settle-back').addEventListener('click', () => moveSettle(1));
   document.getElementById('settle-form').addEventListener('input', handleSettleInput);
@@ -1771,6 +1831,10 @@ async function init() {
   document.addEventListener('visibilitychange', () => {
     if (state !== null && document.visibilityState === 'visible') enterApp();
   });
+  // 인터넷이 돌아오면 저장하지 못한 변경을 다시 보낸다.
+  window.addEventListener('online', () => {
+    if (state !== null) flushSaves();
+  });
 
   const authview = document.getElementById('authview');
   authview.addEventListener('input', handleAuthInput);
@@ -1785,7 +1849,7 @@ async function init() {
 
   const userId = await sessionUser();
   if (userId === null) showAuth('login');
-  else enterAs(userId);
+  else await enterApplication();
 }
 
 init();

@@ -178,10 +178,6 @@ test('requestAuth: 라이브러리를 못 불러와도 멈추지 않는다', { s
   assert.equal(result.code, undefined);
 });
 
-test('계정마다 저장 키가 다르다', { skip: !has('dataKey') }, () => {
-  assert.notEqual(call(`dataKey('a')`), call(`dataKey('b')`));
-});
-
 test('categoryNameError', { skip: !has('categoryNameError') }, () => {
   const cats = q([{ name: '식비' }, { name: '교통' }]);
   const error = (name) => call(`categoryNameError(${q(name)}, ${cats})`);
@@ -271,7 +267,6 @@ test('getToday는 로컬 시간 기준이다', { skip: !has('getToday') }, () =>
 
 test('createEmptyData', { skip: !has('createEmptyData') }, () => {
   const data = call('createEmptyData()');
-  assert.equal(data.version, 1);
   assert.deepEqual(data.categories.map((c) => c.name), ['식비', '의류', '취미', '교통', '기타']);
   assert.ok(data.categories.every((c) => typeof c.id === 'string' && c.id && c.hidden === false));
   assert.equal(new Set(data.categories.map((c) => c.id)).size, 5);
@@ -279,38 +274,8 @@ test('createEmptyData', { skip: !has('createEmptyData') }, () => {
   assert.deepEqual(data.expenses, []);
   assert.deepEqual(data.piggy, { balance: 0, history: [] });
   assert.deepEqual(data.unsettled, []);
-  assert.equal(call('isValidData(createEmptyData())'), true);
-});
-
-test('loadData 상태 구분', { skip: !has('loadData') }, () => {
-  const KEY = load().call(`dataKey('u')`);
-  assert.equal(load().call(`loadData('u').status`), 'empty');
-
-  const saved = load();
-  assert.equal(saved.call(`saveData('u', createEmptyData())`), true);
-  assert.equal(load(saved.store).call(`loadData('u').status`), 'ok');
-  assert.equal(load(saved.store).call(`loadData('other').status`), 'empty', '다른 계정의 데이터는 읽지 않음');
-
-  const good = JSON.parse(saved.store[KEY]);
-  const bad = {
-    '깨진 JSON': '{not json',
-    null: 'null',
-    배열: '[]',
-    '다른 버전': q({ ...good, version: 2 }),
-    '버전 없음': q({ ...good, version: undefined }),
-    'categories 누락': q({ ...good, categories: undefined }),
-    'categories 원소 오류': q({ ...good, categories: [{ id: 1 }] }),
-    'months 배열': q({ ...good, months: [] }),
-    'expenses 객체': q({ ...good, expenses: {} }),
-    'piggy 잔액 문자': q({ ...good, piggy: { balance: '0', history: [] } }),
-    'piggy 내역 누락': q({ ...good, piggy: { balance: 0 } }),
-    'unsettled 누락': q({ ...good, unsettled: undefined }),
-  };
-  for (const [name, value] of Object.entries(bad)) {
-    const t = load({ [KEY]: value });
-    assert.equal(t.call(`loadData('u').status`), 'corrupt', name);
-    assert.equal(t.store[KEY], value, `${name}: 원본 유지`);
-  }
+  assert.deepEqual(call('dataToRows(createEmptyData())').categories.map((c) => c.name), ['식비', '의류', '취미', '교통', '기타'], '만든 순서가 id 순서');
+  assert.deepEqual([...data.categories].sort((a, b) => (a.id < b.id ? -1 : 1)), data.categories, '같은 1ms에 만들어도 id 순서가 만든 순서');
 });
 
 test('formatSigned', { skip: !has('formatSigned') }, () => {
@@ -597,8 +562,153 @@ test('분류 표시', { skip: !has('categoryName') }, () => {
   assert.equal(call(`categoryName(${data}, 'zzz')`), '삭제된 분류');
 });
 
-test('saveData 실패를 false로 알린다', { skip: !has('saveData') }, () => {
+// ---- 서버 저장 ----
+
+const sampleData = {
+  categories: [{ id: 'c1', name: '식비', hidden: false }, { id: 'c2', name: '의류', hidden: true }],
+  months: {
+    '2026-11': { baseAmount: 1000, carryIn: 100, deduction: 50, total: 1050, allocations: { c1: 1050 }, settled: true, skipped: false },
+    '2026-10': { baseAmount: 0, carryIn: 0, deduction: 0, total: null, allocations: {}, settled: false, skipped: true },
+  },
+  expenses: [{ id: 'e1', date: '2026-11-14', categoryId: 'c1', amount: 900, memo: '점심' }],
+  piggy: { balance: 500, history: [{ id: 'p1', date: '2026-11-01', type: 'save', amount: 500, memo: '10월 남은 돈 저축' }] },
+  unsettled: [{ month: '2026-09', amount: 70 }],
+};
+const toRows = (data) => call(`dataToRows(${q(data)})`);
+const diff = (before, after) => call(`diffRows(${q(toRows(before))}, ${q(toRows(after))})`);
+
+test('행 변환: 앱 데이터와 DB 행이 서로 맞다', { skip: !has('dataToRows') }, () => {
+  const rows = toRows(sampleData);
+  assert.deepEqual(rows.expenses[0], { id: 'e1', date: '2026-11-14', category_id: 'c1', amount: 900, memo: '점심' });
+  assert.equal(rows.months[0].base_amount, 1000);
+  assert.equal(rows.months[1].total, null, '건너뛴 달은 총 금액이 비어 있음');
+  assert.equal(rows.piggy_balance, 500);
+  const { piggy_balance: balance, ...rest } = rows;
+  const back = call(`rowsToData(${q({ ...rest, piggy: [{ user_id: 'u', balance }] })})`);
+  assert.deepEqual(back, sampleData);
+  assert.equal(toRows({ ...sampleData, months: { '2026-11': { ...sampleData.months['2026-11'], skipped: undefined } } }).months[0].skipped, false, '정산으로 만든 달은 skipped가 없어도 false');
+});
+
+test('rowsToData는 만든 순서대로 정렬한다', { skip: !has('rowsToData') }, () => {
+  const { piggy_balance: balance, ...rest } = toRows({ ...sampleData, categories: [{ id: 'c2', name: '둘', hidden: false }, { id: 'c1', name: '하나', hidden: false }] });
+  const data = call(`rowsToData(${q({ ...rest, piggy: [{ balance }] })})`);
+  assert.deepEqual(data.categories.map((c) => c.name), ['하나', '둘']);
+});
+
+test('diffRows는 바뀐 행만 고른다', { skip: !has('diffRows') }, () => {
+  assert.deepEqual(diff(sampleData, sampleData), {}, '바뀐 게 없으면 보낼 것도 없음');
+
+  const added = { ...sampleData, expenses: [...sampleData.expenses, { id: 'e2', date: '2026-11-14', categoryId: 'c2', amount: 1, memo: '' }] };
+  assert.deepEqual(diff(sampleData, added), { expenses: [{ id: 'e2', date: '2026-11-14', category_id: 'c2', amount: 1, memo: '' }] });
+
+  const edited = { ...sampleData, expenses: [{ ...sampleData.expenses[0], amount: 800 }] };
+  assert.deepEqual(diff(sampleData, edited).expenses.map((e) => e.amount), [800]);
+
+  assert.deepEqual(diff(sampleData, { ...sampleData, expenses: [] }), { deleted_expenses: ['e1'] });
+  assert.deepEqual(diff(sampleData, { ...sampleData, categories: [sampleData.categories[0]] }), { deleted_categories: ['c2'] });
+
+  const settled = {
+    ...sampleData,
+    months: { ...sampleData.months, '2026-12': { baseAmount: 1, carryIn: 0, deduction: 0, total: 1, allocations: {}, settled: true } },
+    piggy: { balance: 400, history: [...sampleData.piggy.history, { id: 'p2', date: '2026-12-01', type: 'deficit', amount: 100, memo: '' }] },
+    unsettled: [...sampleData.unsettled, { month: '2026-11', amount: 5 }],
+  };
+  const changes = diff(sampleData, settled);
+  assert.deepEqual(Object.keys(changes).sort(), ['months', 'piggy_balance', 'piggy_history', 'unsettled'], '정산은 한 번에 함께 저장');
+  assert.equal(changes.piggy_balance, 400);
+  assert.deepEqual(changes.months.map((m) => m.month), ['2026-12']);
+
+  const zero = call(`diffRows(emptyRows(), dataToRows(createEmptyData()))`);
+  assert.equal(zero.piggy_balance, 0, '새 계정은 저금통 0원도 저장');
+  assert.equal(zero.categories.length, 5);
+});
+
+test('fetchAll은 1000행이 넘어도 전부 읽는다', { skip: !has('fetchAll') }, async () => {
   const t = load();
-  vm.runInContext(`localStorage.setItem = () => { throw new Error('QuotaExceededError'); };`, t.ctx);
-  assert.equal(t.call(`saveData('u', createEmptyData())`), false);
+  vm.runInContext(`
+    var calls = [];
+    client = { from: () => ({ select: () => ({ order: () => ({
+      range: async (first, last) => {
+        calls.push([first, last]);
+        const all = Array.from({ length: 2500 }, (_, id) => ({ id }));
+        return { data: all.slice(first, last + 1), error: null };
+      },
+    }) }) }) };
+  `, t.ctx);
+  const rows = await vm.runInContext(`fetchAll('expenses', 'id')`, t.ctx);
+  assert.equal(rows.length, 2500);
+  assert.equal(rows[2499].id, 2499);
+  assert.equal(t.call('calls').length, 3);
+});
+
+test('loadData 상태 구분', { skip: !has('loadData') }, async () => {
+  const withClient = (rowsOf) => {
+    const t = load();
+    t.ctx.rowsOf = rowsOf;
+    vm.runInContext(`client = { from: (table) => ({ select: () => ({ order: () => ({ range: async () => rowsOf(table) }) }) }) };`, t.ctx);
+    return vm.runInContext(`loadData()`, t.ctx);
+  };
+  const noRows = { data: [], error: null };
+  assert.equal((await withClient(() => noRows)).status, 'empty', '저금통 행이 없으면 새 계정');
+
+  const { piggy_balance: balance, ...rest } = toRows(sampleData);
+  const tables = { ...rest, piggy: [{ user_id: 'u', balance }] };
+  const ok = await withClient((table) => ({ data: tables[table], error: null }));
+  assert.equal(ok.status, 'ok');
+  assert.deepEqual(JSON.parse(JSON.stringify(ok.data)), sampleData);
+
+  const failed = await withClient((table) => (table === 'expenses' ? { data: null, error: { message: 'x' } } : noRows));
+  assert.equal(failed.status, 'failed', '한 테이블이라도 못 읽으면 실패 (빈 계정으로 착각하지 않음)');
+  assert.equal(failed.data, undefined);
+  assert.equal((await vm.runInContext(`client = null; loadData()`, load().ctx)).status, 'failed', '라이브러리를 못 불러온 경우');
+});
+
+test('saveData는 실패를 false로 알린다', { skip: !has('saveData') }, async () => {
+  const run = (code) => {
+    const t = load();
+    vm.runInContext(code, t.ctx);
+    return vm.runInContext(`saveData({ months: [] })`, t.ctx);
+  };
+  assert.equal(await run(`client = { rpc: async () => ({ error: null }) };`), true);
+  assert.equal(await run(`client = { rpc: async () => ({ error: { message: 'x' } }) };`), false);
+  assert.equal(await run(`client = { rpc: async () => { throw new Error('Failed to fetch'); } };`), false);
+});
+
+test('flushSaves: 순서대로 하나씩 보내고 실패분은 다시 보낸다', { skip: !has('flushSaves') }, async () => {
+  const t = load();
+  vm.runInContext(`
+    var banner = { hidden: true };
+    var document = { getElementById: () => banner };
+    var sent = [];
+    var active = 0;
+    var overlap = false;
+    var failNext = false;
+    client = { rpc: async (name, { changes }) => {
+      if (active > 0) overlap = true;
+      active += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active -= 1;
+      if (failNext) { failNext = false; return { error: { message: 'x' } }; }
+      sent.push(name === 'save_changes' ? changes : null);
+      return { error: null };
+    } };
+  `, t.ctx);
+  t.ctx.setTimeout = setTimeout;
+  vm.runInContext(`state = createEmptyData(); synced = dataToRows(state);`, t.ctx);
+
+  await vm.runInContext(`flushSaves()`, t.ctx);
+  assert.equal(t.call('sent').length, 0, '바뀐 게 없으면 서버를 부르지 않음');
+
+  const done = vm.runInContext(`state.piggy.balance = 1; flushSaves(); state.piggy.balance = 2; flushSaves(); state.piggy.balance = 3; flushSaves();`, t.ctx);
+  await done;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(t.call('overlap'), false, '동시에 보내지 않음');
+  assert.deepEqual(t.call('sent').map((c) => c.piggy_balance), [1, 3], '중간 값은 묶고 마지막 값이 마지막에 도착');
+
+  await vm.runInContext(`failNext = true; state.piggy.balance = 4; flushSaves()`, t.ctx);
+  assert.equal(t.call('banner.hidden'), false, '실패하면 안내');
+  assert.equal(t.call('synced.piggy_balance'), 3, '실패한 변경은 저장된 것으로 치지 않음');
+  await vm.runInContext(`flushSaves()`, t.ctx);
+  assert.equal(t.call('banner.hidden'), true, '성공하면 안내 사라짐');
+  assert.equal(t.call('sent').at(-1).piggy_balance, 4, '실패분을 다시 보냄');
 });
