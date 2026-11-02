@@ -363,6 +363,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 const SUPABASE_URL = 'https://kqqveotykeuyffrlhrxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_1XpOuFjG5GUXEROTHBHaAQ_j9iU3hwD';
 const PAGE_SIZE = 1000;
+const KEEPALIVE_MAX = 60000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
@@ -1615,10 +1616,17 @@ const TOMATO_LARGE = '<svg width="64" height="64" viewBox="0 0 48 48" aria-hidde
 let auth = { mode: 'login', email: '', pw: '', pw2: '', errors: {}, busy: false };
 let client = null;
 
+// 저장 직후 새로고침하거나 창을 닫아도 저장 요청이 끝까지 가게 한다. keepalive 본문은 64KB까지만 된다.
+function fetchKeepingSaves(input, init) {
+  const isSave = String(input).includes('/rpc/') && (init?.body?.length ?? 0) < KEEPALIVE_MAX;
+  return fetch(input, { ...init, keepalive: isSave });
+}
+
 // 세션은 sessionStorage에만 둔다. 브라우저를 닫으면 로그인이 끝난다. (기본값 localStorage는 쓰지 않는다)
 function db() {
   client ??= globalThis.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { storage: sessionStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    global: { fetch: fetchKeepingSaves },
   });
   return client;
 }

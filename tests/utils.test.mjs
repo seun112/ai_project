@@ -712,3 +712,14 @@ test('flushSaves: 순서대로 하나씩 보내고 실패분은 다시 보낸다
   assert.equal(t.call('banner.hidden'), true, '성공하면 안내 사라짐');
   assert.equal(t.call('sent').at(-1).piggy_balance, 4, '실패분을 다시 보냄');
 });
+
+test('fetchKeepingSaves: 저장 요청만 창을 닫아도 끝까지 보낸다', { skip: !has('fetchKeepingSaves') }, async () => {
+  const t = load();
+  vm.runInContext(`var seen = []; var fetch = async (url, init) => { seen.push(init.keepalive); return init; };`, t.ctx);
+  const send = (url, size) => vm.runInContext(`fetchKeepingSaves(${q(url)}, { method: 'POST', body: 'x'.repeat(${size}) })`, t.ctx);
+  await send('https://x.supabase.co/rest/v1/rpc/save_changes', 10);
+  await send('https://x.supabase.co/rest/v1/rpc/save_changes', 70000);
+  await send('https://x.supabase.co/rest/v1/expenses', 10);
+  await vm.runInContext(`fetchKeepingSaves('https://x.supabase.co/rest/v1/months')`, t.ctx);
+  assert.deepEqual(t.call('seen'), [true, false, false, false], '64KB를 넘으면 keepalive 없이 보내야 실패하지 않음');
+});
