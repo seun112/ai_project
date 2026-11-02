@@ -1,49 +1,131 @@
 # 생활비 관리 시스템
 
-## 소개
+매달 쓸 총 금액을 먼저 정하고 분류별로 나눠 쓰면서 남은 돈과 초과분을 관리하는 웹 앱입니다.
 
-매달 쓸 수 있는 총 금액을 먼저 정하고, 분류별로 나눠 쓰면서 남은 돈과 초과분을 한눈에 관리하는 웹 앱입니다.
+- **완성작:** https://aiproject-v5el.vercel.app/
+- **GitHub 저장소:** https://github.com/seun112/ai_project
 
-**완성작:** https://aiproject-v5el.vercel.app/
+## 1. 제작한 것 소개
 
-- 위 주소에 접속해 이메일과 비밀번호(8자 이상)로 회원가입하면 바로 시작합니다. 확인 메일은 없고 설치도 필요 없습니다.
-- 브라우저를 닫으면 로그아웃되고, 다시 로그인하면 내 데이터를 불러옵니다.
-- 로그인과 데이터 저장은 Supabase, 배포는 Vercel을 씁니다. 계정마다 자기 데이터만 읽고 쓸 수 있습니다.
-- 프레임워크 없이 HTML, CSS, JS를 한 파일(`index.html`)에 담습니다.
+### 앱 소개
 
-## 화면
+생활비 관리 시스템은 한 달에 쓸 돈을 정하고 지출을 기록하는 웹 앱입니다. 화면에는 "생활비 통장"이라는 이름으로 나옵니다. 매달 첫 접속 때 정산 창에서 지난달 결과를 처리하고 이번 달 총 금액을 분류별로 나눕니다. 그 뒤로는 대시보드에서 오늘 쓴 돈을 입력하고, 이번 달 남은 돈과 분류별 남은 돈을 바로 확인합니다.
 
-| 로그인 | 매달 첫 정산 |
+### 해결하려는 문제
+
+지출을 적기만 해서는 이번 달에 얼마가 남았는지, 어떤 분류를 넘겼는지 바로 알기 어렵습니다. 이 앱은 쓸 돈을 먼저 나눠 두고 남은 돈과 초과분을 한눈에 보여 줍니다. 지난달에 남거나 넘친 돈을 다음 달로 어떻게 넘길지도 매달 정하게 합니다.
+
+### 주요 기능
+
+- **로그인·회원가입:** 이메일과 비밀번호(8자 이상)를 씁니다. 확인 메일 없이 가입 즉시 로그인되고, 브라우저를 닫으면 로그아웃됩니다.
+- **매달 첫 접속 정산 이벤트 창:** 1단계에서 지난달 남은 돈이나 초과분을 처리하고 총 금액을 정합니다. 2단계에서 분류별로 나눕니다. 끝내기 전에는 닫을 수 없습니다.
+- **대시보드:** 오늘 지출 입력과 삭제, 오늘 쓴 돈, 이번 달 남은 돈, 저금통 잔액, 분류별 남은 돈을 보여 줍니다.
+- **달력:** 날짜별 합계와 내역을 보고, 이번 달 오늘까지의 지출을 추가·수정·삭제합니다. 지난달은 볼 수만 있습니다.
+- **설정:** 이번 달 총 금액과 분류별 배분을 고칩니다. 저장 전에 결과를 미리 보여 줍니다.
+
+### 사용한 기술
+
+| 구분 | 기술 |
 |---|---|
-| ![로그인 화면](docs/screenshots/login.png) | ![정산 창 1단계](docs/screenshots/settle-leftover.png) |
+| 화면 | HTML, CSS, JavaScript (프레임워크 없이 `index.html` 한 파일) |
+| 글꼴 | Google Fonts의 Jua, Gowun Dodum |
+| 로그인 | Supabase Auth |
+| 데이터 저장 | Supabase PostgreSQL, Row Level Security, 저장 함수 `save_changes` |
+| 라이브러리 | `@supabase/supabase-js` 2.118.0 (jsDelivr CDN) |
+| 배포 | Vercel |
+| 테스트 | Node.js 내장 테스트(`node:test`), Edge 또는 Chrome headless |
 
-| 분류별 배분 | 대시보드 |
+### 화면
+
+| 로그인 | 회원가입 |
 |---|---|
-| ![정산 창 2단계](docs/screenshots/allocate-over.png) | ![대시보드](docs/screenshots/dashboard.png) |
+| ![로그인 화면](docs/screenshots/login.png) | ![회원가입 화면](docs/screenshots/signup.png) |
+
+| 정산 창 1단계: 남은 돈 처리 | 정산 창 1단계: 초과 처리 |
+|---|---|
+| ![정산 창 1단계 남은 돈 처리](docs/screenshots/settle-leftover.png) | ![정산 창 1단계 초과 처리](docs/screenshots/settle-over.png) |
+
+| 정산 창 2단계 | 대시보드 |
+|---|---|
+| ![정산 창 2단계 분류 배분](docs/screenshots/settle-allocate.png) | ![대시보드](docs/screenshots/dashboard.png) |
 
 | 달력 | 설정 |
 |---|---|
 | ![달력](docs/screenshots/calendar.png) | ![설정](docs/screenshots/settings.png) |
 
-## 커밋 내역
+스크린샷은 `tests/browser.mjs`와 가짜 Supabase 클라이언트로 예시 데이터를 넣어 찍었습니다.
 
-작업 단위마다 `<타입>: <무엇을 왜 했는지>` 형식으로 커밋했습니다. 전체 내역은 [GitHub 커밋 목록](https://github.com/seun112/ai_project/commits/main)에서 볼 수 있습니다.
+### 실행 방법
 
-![GitHub 커밋 내역](docs/screenshots/commits.png)
+**배포 주소에서 쓰기**
 
-## PRD
+1. https://aiproject-v5el.vercel.app/ 에 접속합니다.
+2. `회원가입` 탭에서 이메일과 비밀번호를 입력합니다.
+3. 첫 달 정산 창에서 총 금액을 정하고 분류별로 나누면 시작됩니다.
+
+**로컬에서 열기**
+
+저장소를 내려받아 `index.html`을 브라우저로 엽니다. 설치와 빌드는 없습니다. 로컬에서 열어도 코드에 적힌 Supabase 프로젝트에 연결됩니다.
+
+**테스트 실행**
+
+```
+node --test tests/utils.test.mjs
+node tests/browser.mjs
+```
+
+- 첫 번째 명령은 계산, 검증, 저장 로직을 검사합니다.
+- 두 번째 명령은 Edge 또는 Chrome을 headless로 띄워 화면 시나리오를 검사합니다. 실제 서버 대신 `tests/fake-supabase.js`를 쓰고, 스크린샷은 `tests/shots/`에 저장합니다.
+
+**Supabase를 직접 설정할 때 필요한 것**
+
+1. Supabase 프로젝트
+2. Authentication의 Email 설정에서 Confirm email 끄기, 최소 비밀번호 길이 8
+3. SQL Editor에서 `supabase/schema.sql` 전체를 한 번 실행
+4. `index.html`의 `SUPABASE_URL`, `SUPABASE_KEY`에 자기 프로젝트의 Project URL과 공개용 키 넣기
+
+비밀 키와 DB 비밀번호는 앱에 필요하지 않으며 저장소에 넣지 않습니다.
+
+### 폴더 구조
+
+```
+.
+├── index.html              앱 전체 (HTML, CSS, JS)
+├── PRD.md                  요구사항
+├── TODO.md                 작업 목록과 변경 내역
+├── CLAUDE.md               작업 규칙
+├── README.md
+├── supabase/
+│   └── schema.sql          테이블, Row Level Security, 저장 함수
+├── tests/
+│   ├── utils.test.mjs      로직 테스트
+│   ├── browser.mjs         브라우저 실행 도구
+│   ├── scenario.mjs        화면 시나리오
+│   └── fake-supabase.js    테스트용 가짜 클라이언트
+├── docs/
+│   ├── design.md           화면 설계
+│   ├── mockup.html         동작하는 화면 목업
+│   ├── initial-todo.md     처음 계획
+│   ├── screenshots/        README 스크린샷
+│   └── skills/             frontend-design 원문과 라이선스
+└── .claude/skills/todo-commit-workflow/SKILL.md
+```
+
+## 2. PRD와 Todo 리스트
+
+### 2-1. PRD
 
 원본은 [PRD.md](PRD.md)입니다.
 
 <details>
 <summary>PRD 전문 펼치기</summary>
 
-### PRD: 생활비 관리 시스템
+#### PRD: 생활비 관리 시스템
 
 > 이 문서는 화면 설계(`docs/mockup.html`, `docs/design.md`)를 확정한 뒤 다시 쓴 버전이다.
 > 처음 계획과 달라진 점은 `TODO.md`의 "변경 내역"에 모두 기록했다.
 
-#### 1. 개요
+##### 1. 개요
 
 - **목적**: 매달 쓸 수 있는 총 금액을 먼저 정하고, 분류별로 나눠 쓰면서 남은 돈과 초과분을 한눈에 관리하는 웹 앱
 - **기준 화면**: 데스크톱 (좁은 화면에서 깨지지 않을 정도의 반응형만 지원)
@@ -53,7 +135,7 @@
 - **개발 순서**: 화면과 기능은 먼저 브라우저 저장(localStorage)으로 만들고, 마지막에 로그인·DB·배포를 붙인다. 저장 코드는 `loadData`/`saveData` 한 곳에 모아 교체하기 쉽게 한다.
 - **통화**: 원(₩), 정수만 허용
 
-#### 2. 화면 구성
+##### 2. 화면 구성
 
 | 화면 | 언제 보이나 | 내용 |
 |---|---|---|
@@ -66,7 +148,7 @@
 - 상단 폴더 탭은 `대시보드`, `달력`, `설정` 세 개다.
 - 로그아웃 버튼은 두지 않는다.
 
-#### 3. 핵심 사용 흐름
+##### 3. 핵심 사용 흐름
 
 1. 이메일과 비밀번호로 로그인한다. (처음이면 회원가입)
 2. 그 달 첫 접속이면 **정산 이벤트 창**이 대시보드 위에 뜬다. 끝내기 전에는 닫을 수 없다.
@@ -74,9 +156,9 @@
 4. 달력으로 날짜별 지출을 보고 빠뜨린 지출을 넣거나 고치고, 설정에서 이번 달 금액을 고칠 수 있다.
 5. 다음 달 첫 접속에서 2번으로 돌아간다.
 
-#### 4. 기능 요구사항
+##### 4. 기능 요구사항
 
-##### FR-1. 로그인과 회원가입
+###### FR-1. 로그인과 회원가입
 
 - 이메일: **이메일 형식**이어야 한다. 대문자로 입력해도 소문자로 맞춰서 비교하고, 이미 가입된 이메일은 가입할 수 없다.
 - 비밀번호: **8자 이상**. 회원가입에서는 한 번 더 입력해 같은지 확인한다.
@@ -98,7 +180,7 @@
 - 로그인 상태는 **브라우저를 닫으면 끝난다.** 다음에 열면 다시 로그인한다.
 - 비밀번호는 Supabase Auth가 **암호화(해시)해서** 저장한다. 화면과 저장소 코드에 비밀번호를 그대로 두지 않는다.
 
-##### FR-2. 정산 이벤트 창 (매달 첫 접속)
+###### FR-2. 정산 이벤트 창 (매달 첫 접속)
 
 - 이번 달 정산이 끝나지 않았으면 대시보드 위에 어두운 막과 함께 뜬다. 닫기 버튼이 없고, 끝내야 닫힌다.
 - 단계는 **1단계(지난달 처리 + 총 금액)** 와 **2단계(분류 배분)** 두 개다. 처음 쓰는 달도 같은 두 단계이고, 지난달 결과 부분만 없다.
@@ -138,7 +220,7 @@
 - 분류 추가와 삭제는 FR-8에 따른다.
 - `이전`으로 1단계에 돌아가도 입력값은 유지된다.
 
-##### FR-3. 지출 입력·수정·삭제
+###### FR-3. 지출 입력·수정·삭제
 
 - 입력 항목: **분류**(칩으로 하나 선택), **금액**(원 정수, 1원 이상), **메모**(선택, 30자 이내)
 - **대시보드**: 오늘 날짜로만 입력한다. (날짜 선택 없음) 오늘 쓴 내역 목록에서 `×` 버튼으로 삭제할 수 있다.
@@ -147,7 +229,7 @@
 - 분류 배분액을 넘겨도 입력은 허용한다.
 - Enter 키로도 추가·저장된다.
 
-##### FR-4. 대시보드
+###### FR-4. 대시보드
 
 - **오늘 쓴 돈**: 오늘 입력한 지출의 합계
 - **오늘 지출 입력**과 **오늘 내역** (FR-3)
@@ -156,7 +238,7 @@
 - **분류별 남은 돈**: 분류마다 남은 금액, 막대, "배분 ○원 · 사용 ○원". 초과한 분류는 `-○원`, 빨간색, `초과` 라벨을 같이 붙여 색만으로 구분하지 않게 한다.
 - 정산에서 "그냥 두기"로 기록된 **미정산 금액은 화면에 보여주지 않는다.** (데이터에만 남긴다.)
 
-##### FR-5. 달력
+###### FR-5. 달력
 
 - 월 달력, **월요일부터 일요일** 순서
 - **모든 날짜 칸**에 그날의 총 사용 금액을 보여준다. 쓴 돈이 없는 날은 연하게 `0`. 지출이 있는 날은 연두색 칸, 오늘은 굵은 테두리와 `오늘` 표시
@@ -172,7 +254,7 @@
 - 이번 달: 오른쪽 아래에 "이번 달 남은 돈"을 보여준다.
 - 지난달: **읽기 전용**이고 "지난달 기록 · 볼 수만 있어요" 라벨을 보여준다. 추가·수정·삭제 버튼과 입력 상자가 없다.
 
-##### FR-6. 설정 (이번 달 금액 수정)
+###### FR-6. 설정 (이번 달 금액 수정)
 
 - `이번 달 총 금액`과 분류별 배분을 고칠 수 있다.
 - 분류마다 "사용 ○원"을 같이 보여준다.
@@ -183,13 +265,13 @@
 - 저장하면 대시보드로 돌아가고, 이미 쓴 지출은 그대로 남는다.
 - `취소`는 저장하지 않고 대시보드로 돌아간다.
 
-##### FR-7. 저금통
+###### FR-7. 저금통
 
 - 저금통은 **정산 이벤트 창에서만** 변한다. (남은 돈 저축, 초과분 차감)
 - 대시보드에 잔액만 보여준다. 저금통 화면과 `사용하기`는 없다.
 - 정산 때 일어난 저축과 차감은 내역으로 기록한다. (`save`, `deficit`)
 
-##### FR-8. 분류 관리 (정산 이벤트 창 2단계)
+###### FR-8. 분류 관리 (정산 이벤트 창 2단계)
 
 - 기본 분류: **식비, 의류, 취미, 교통, 기타** 다섯 개
 - **추가**: 이름을 입력하고 `분류 추가`. 빈 이름, 10자 초과, 이미 있는 이름은 안내와 함께 막는다.
@@ -197,7 +279,7 @@
 - 삭제한 분류는 **이번 달부터** 목록에서 빠지고, 이미 쓴 내역은 지난 기록에 그대로 남는다. 지출 내역이 있는 분류는 실제로 지우지 않고 숨김 처리한다.
 - 설정 화면에서는 분류를 추가·삭제하지 않는다. (금액만 수정)
 
-#### 5. 계산 규칙
+##### 5. 계산 규칙
 
 ```
 총 잔액     = 이번 달 총 금액 − 이번 달 전체 지출 합계
@@ -213,7 +295,7 @@
 예시: 총 100만 원, 식비 40만 / 의류 60만 배분 → 식비 45만, 의류 10만 지출
 → 식비 잔액 **−5만**, 의류 잔액 **+50만**, 총 잔액 **45만**
 
-#### 6. 예외 상황
+##### 6. 예외 상황
 
 | 상황 | 처리 |
 |---|---|
@@ -224,7 +306,7 @@
 | 저장 실패 (네트워크 오류 등) | 화면 위에 "저장하지 못했습니다" 안내를 띄우고, 다음 저장 때나 인터넷이 돌아오면 다시 보낸다. |
 | 데이터 불러오기 실패 | "데이터를 불러오지 못했어요" 안내와 `다시 시도` 버튼만 보여 준다. 데이터를 지우는 초기화 기능은 두지 않는다. |
 
-#### 7. 데이터 모델
+##### 7. 데이터 모델
 
 ```js
 {
@@ -249,7 +331,7 @@
 - 모든 데이터는 `userId`로 구분하고, 다른 사용자의 데이터는 읽거나 쓸 수 없다.
 - 개발 단계의 브라우저 저장에서는 계정마다 따로 저장한다.
 
-#### 8. 비기능 요구사항
+##### 8. 비기능 요구사항
 
 - 데스크톱 브라우저 기준. 창을 좁혀도 가로 스크롤이 생기거나 글자가 겹치지 않는 정도로만 대응한다.
 - 금액은 천 단위 쉼표와 `원`을 붙여 표시한다. (예: `1,200,000원`)
@@ -258,7 +340,7 @@
 - DB 접속 비밀번호, 서비스 키 같은 비밀 값은 **저장소에 올리지 않고** 호스팅 서비스의 환경 변수로 넣는다. (`.env`는 `.gitignore`)
 - 서버에 배포해 인터넷 주소로 접속할 수 있어야 한다.
 
-#### 9. 범위 제외
+##### 9. 범위 제외
 
 - 주간 화면과 주간 합계
 - 저금통 화면, 저금통 `사용하기`
@@ -272,7 +354,7 @@
 - 분류별 이월
 - (선택) 백업 JSON 내보내기·가져오기 — 시간이 남을 때만
 
-#### 10. 수용 기준 (테스트 시나리오)
+##### 10. 수용 기준 (테스트 시나리오)
 
 1. 이메일 형식이 아니면 가입과 로그인이 막힌다. 대문자로 입력해도 같은 이메일로 처리된다.
 2. 이미 가입된 이메일로 가입할 수 없고, 비밀번호가 8자 미만이거나 확인과 다르면 가입할 수 없다. 가입하면 확인 메일 없이 바로 로그인된다.
@@ -292,25 +374,25 @@
 16. 배포한 주소에서 같은 기능이 그대로 동작하고, 새로고침해도 데이터가 DB에서 다시 불러와진다.
 17. 달력에서 이번 달의 오늘까지 날짜에 지출을 추가·수정·삭제할 수 있고, 달력 칸 합계와 이번 달 남은 돈, 대시보드가 바로 바뀐다. 금액을 잘못 넣으면 안내가 나온다.
 
-#### 11. 아직 정하지 못한 것
+##### 11. 아직 정하지 못한 것
 
 - **DB·서버 구조 (확정)**: 과제 안내문을 확인해 직접 만든 서버 없이 **DB와 로그인은 Supabase, 배포는 Vercel**을 쓴다. 제출은 GitHub 저장소로 하고 README에 완성작 링크를 올린다.
 - **비밀번호를 잊었을 때**: 비밀번호 찾기가 없다.
 
 </details>
 
-## 처음 계획
+### 2-2. 처음 계획
 
-원본은 [docs/initial-todo.md](docs/initial-todo.md)이고, 현재 계획은 [TODO.md](TODO.md)입니다.
+[docs/initial-todo.md](docs/initial-todo.md)의 내용을 그대로 옮겼습니다.
 
 <details>
 <summary>처음 계획 펼치기</summary>
 
-### Todo 리스트
+# Todo 리스트
 
 > 푸시 단위는 Todo 하나(또는 그 묶음)다. 작업 중 계획이 바뀌면 아래 **변경 내역**에 반드시 기록한다.
 
-#### 진행 규칙
+## 진행 규칙
 
 - 작업 단위마다 커밋하고, 푸시는 아래 **푸시 시점**마다 한다.
 - 커밋 메시지 형식: `<타입>: <무엇을 왜 했는지>`
@@ -318,54 +400,54 @@
   - 예: `feat: 분류 배분 합계 검증 추가 (총 금액과 불일치 시 저장 차단)`
 - Todo가 바뀌면 이 파일의 변경 내역도 **같은 커밋**에 포함한다.
 
-#### 초기 Todo (처음 계획)
+## 초기 Todo (처음 계획)
 
-##### T0. 프로젝트 준비 (푸시 1)
+### T0. 프로젝트 준비 (푸시 1)
 - [ ] Git 저장소 초기화, `.gitignore`
 - [ ] `PRD.md`, `TODO.md` 추가
 - [ ] `README.md` 뼈대 (소개, PRD/Todo, 변경 내역, 스킬, 느낀 점 섹션)
 - [ ] 커밋 규칙, 스킬 계획 정리
 
-##### T1. 데이터 모델과 저장 (푸시 2)
+### T1. 데이터 모델과 저장 (푸시 2)
 - [ ] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
 - [ ] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
 - [ ] localStorage 저장/불러오기, 버전 필드
 - [ ] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
 - [ ] 월/주 계산 유틸 (월~일 기준)
 
-##### T2. 정산 마법사 (푸시 3)
+### T2. 정산 마법사 (푸시 3)
 - [ ] 새 달 첫 접속 감지, 마법사 자동 실행
 - [ ] 첫 실행 시 지난달 결과 단계 건너뛰기
 - [ ] 총 금액 설정 (기본 금액 + 이월 − 차감)
 - [ ] 분류별 배분 입력, 미배분 금액 실시간 표시
 - [ ] 합계 검증 (합계 ≠ 총 금액이면 저장 차단)
 
-##### T3. 지출과 대시보드 (푸시 4)
+### T3. 지출과 대시보드 (푸시 4)
 - [ ] 지출 입력/수정/삭제 모달
 - [ ] 날짜 범위 제한 (이번 달만), 지난달 잠금
 - [ ] 총 잔액, 분류별 잔액 계산
 - [ ] 분류 초과 시 `-` 표기와 빨간색, 경고 표시
 - [ ] 진행 바
 
-##### T4. 달력과 주간 뷰 (푸시 5)
+### T4. 달력과 주간 뷰 (푸시 5)
 - [ ] 월 달력, 날짜별 합계
 - [ ] 날짜 클릭 시 일별 지출 목록
 - [ ] 주간 뷰 (월~일), 일별/분류별 합계
 - [ ] 월 경계 주 처리, 이전 달 열람 (읽기 전용)
 
-##### T5. 저금통 (푸시 6)
+### T5. 저금통 (푸시 6)
 - [ ] 저축 시 잔액 합산, 내역 기록
 - [ ] 사용하기 (메모 + 금액), 잔액 초과 차단
 - [ ] 내역 목록 (save / use / deficit)
 
-##### T6. 월말 정산 로직 (푸시 7)
+### T6. 월말 정산 로직 (푸시 7)
 - [ ] 남은 돈: 저금통 저축 + 이월 분배 (합 = 남은 금액)
 - [ ] 초과 지출: 다음 달 차감 / 미정산 기록 / 저금통 차감
 - [ ] 저금통 차감 + 남은 초과분 자동 다음 달 차감 처리
 - [ ] 미정산 금액 기록과 대시보드 표시
 - [ ] 건너뛴 달 자동 마감
 
-##### T7. 테스트와 다듬기 (푸시 8)
+### T7. 테스트와 다듬기 (푸시 8)
 - [ ] PRD 수용 기준 8개 시나리오 수동 테스트
 - [ ] 월 전환 시나리오 테스트 (날짜를 바꿔서 검증)
 - [ ] 버그 수정
@@ -373,12 +455,12 @@
 - [ ] 반응형, 디자인 다듬기
 - [ ] (여유 시) JSON 백업 내보내기/가져오기
 
-##### T8. 문서 마무리 (최종 푸시)
+### T8. 문서 마무리 (최종 푸시)
 - [ ] README 완성: 소개, PRD/Todo, 변경 내역
 - [ ] 스킬 섹션: SKILL.md 내용과 사용 방식, 선택/제작 이유
 - [ ] 느낀 점과 결론
 
-#### 사용할 스킬 (계획)
+## 사용할 스킬 (계획)
 
 | 스킬 | 구분 | 용도 |
 |---|---|---|
@@ -387,12 +469,184 @@
 
 </details>
 
-## 변경 내역
+### 2-3. 현재 Todo
 
-처음 계획과 달라진 점과 그 이유입니다.
+[TODO.md](TODO.md)의 "현재 Todo"를 체크 상태 그대로 옮겼습니다.
 
 <details>
-<summary>변경 내역 펼치기</summary>
+<summary>현재 Todo 펼치기</summary>
+
+#### T0. 프로젝트 준비 (푸시 1) ✔
+- [x] Git 저장소 초기화, `.gitignore`
+- [x] `PRD.md`, `TODO.md` 추가
+- [x] `README.md` 뼈대
+- [x] 커밋 규칙, 스킬 계획 정리
+- [x] `todo-commit-workflow` 스킬 제작
+
+#### T1. 데이터 모델과 저장 (푸시 2) ✔
+- [x] `index.html` 기본 골격 (HTML, CSS, JS 한 파일)
+- [x] 데이터 구조 정의 (categories, months, expenses, piggy, unsettled)
+- [x] localStorage 저장/불러오기, 버전 필드
+- [x] 금액 검증 유틸 (원 단위 정수만), 금액 포맷 유틸
+- [x] 월/주 계산 유틸 (월~일 기준)
+
+#### T2. 정산 흐름 (푸시 3) ✔
+- [x] 새 달 첫 접속 감지, 정산 창 자동 실행
+- [x] 첫 실행 시 지난달 결과 단계 건너뛰기
+- [x] 총 금액 설정 (기본 금액 + 이월 − 차감, 1원 이상)
+- [x] 분류별 배분 입력, 미배분 금액 실시간 표시
+- [x] 합계 검증 (합계 ≠ 총 금액이면 저장 차단)
+- [x] 기본 분류에 `교통` 추가 (식비·의류·취미·교통·기타)
+- [x] 정산 창에서 분류 추가·삭제 (삭제 확인, 이름 1~10자, 중복 불가, 최소 1개 유지)
+
+#### T3. 화면 틀·디자인 적용과 정산 이벤트 창 전환 (푸시 4) ✔
+- [x] `docs/mockup.html` 기준 디자인 적용 (색 변수, 글꼴, 체크 바탕, 바인더 노트 틀, 폴더 탭 `대시보드/달력/설정`)
+- [x] 기존 종이 통장 디자인 교체
+- [x] 정산 마법사를 **매달 첫 접속 이벤트 창**으로 전환 (대시보드 위, 닫기 불가, 1단계/2단계)
+- [x] 1단계 지난달 남은 돈 처리 화면 (저축 + 이월 = 남은 금액 검증, 오류 안내)
+- [x] 1단계 지난달 초과 처리 화면 (선택 3가지, 저금통 차감 입력과 한도 검증)
+- [x] 처음 쓰는 달 화면 (지난달 결과 없이 총 금액만)
+- [x] 데스크톱 기준 레이아웃, 좁은 화면에서 깨지지 않는 반응형
+- [x] 기존 `tests/`를 새 화면에 맞게 수정
+
+#### T4. 대시보드 (푸시 5) ✔
+- [x] 오늘 지출 입력 (분류 칩, 금액, 메모), 오늘 날짜로만 기록
+- [x] 오늘 쓴 돈, 오늘 내역 목록과 삭제 `×` (수정은 달력에서)
+- [x] 이번 달 남은 돈 (큰 숫자, 사용 비율 막대, 음수는 `-`와 빨간색)
+- [x] 분류별 남은 돈 (막대, 배분·사용, 초과 시 `-`와 `초과` 라벨)
+- [x] 저금통 잔액 표시 (숫자만)
+- [x] 이번 달 지출만 합산, 지난달 기록 잠금
+
+#### T5. 달력 (푸시 6) ✔
+- [x] 월 달력 (월~일), 모든 날짜 칸에 그날 합계(없으면 `0`), 오늘 표시
+- [x] 날짜 선택 시 오른쪽에 그날 합계와 내역
+- [x] `<`/`>` 달 이동 (가장 이른 달 이전, 이번 달 이후 막음)
+- [x] 이번 달 남은 돈 표시, 지난달은 읽기 전용 라벨
+- [x] 이번 달 오늘까지의 날짜: 내역마다 수정(연필)·삭제(`×`) 버튼, `지출 수정` 상자(저장/취소)
+- [x] 이번 달 오늘까지의 날짜: `이 날 지출 추가` 상자, 금액 오류 안내
+- [x] 미래 날짜는 입력 없이 "아직 오지 않은 날이에요.", 지난달은 버튼·입력 모두 없음
+- [x] 추가·수정·삭제가 달력 칸 합계, 남은 돈, 대시보드에 바로 반영되는 테스트
+
+#### T6. 설정: 이번 달 금액 수정 (푸시 7) ✔
+- [x] 총 금액과 분류별 배분 수정, 사용 금액 표시
+- [x] 저장 조건 검증 (미배분 0원, 총 금액 1원 이상, 바뀐 내용 있음)과 안내 문구
+- [x] 이미 쓴 돈보다 적게 정해도 저장, 초과로 표시
+- [x] 저장 전 미리보기(`현재 → 변경`, 바뀐 남은 돈), 취소, 지난달 수정 불가 라벨
+
+#### T7. 월 정산 결과 반영 (푸시 8) ✔
+- [x] 남은 돈: 저금통 저축 + 다음 달 이월 반영
+- [x] 초과 지출: 다음 달 차감 / 그냥 두기(미정산 기록) / 저금통 차감 + 나머지 다음 달 차감
+- [x] 저금통 잔액·내역(`save`, `deficit`) 기록
+- [x] 건너뛴 달 자동 마감
+- [x] 위 규칙의 단위 테스트
+
+#### T8. 로그인과 회원가입 (푸시 9) ✔
+- [x] 로그인/회원가입 화면 (비밀번호 8자 이상, 비밀번호 확인. 처음에는 아이디로 구현했고 T9에서 이메일로 변경)
+- [x] 오류 안내 (입력칸 아래 빨간 글씨, 빨간 테두리)
+- [x] 로그인 후 정산 창 또는 대시보드로 이동, 로그아웃 버튼 없음
+- [x] 계정별 데이터 분리 (브라우저 저장 단계)
+
+#### T9. Supabase 연결 (푸시 10)
+- [x] 로그인 입력을 아이디에서 이메일로 변경하고 테스트 수정
+- [x] Supabase 프로젝트 준비 (Confirm email 끄기)
+- [x] 분류·월·지출·저금통·미정산 테이블 설계와 Row Level Security
+- [x] Supabase Auth로 회원가입·로그인 교체 (비밀번호 해시는 Supabase가 저장, 사용자별 접근 제한)
+- [x] `loadData`/`saveData`를 Supabase 호출로 교체, 저장 실패 안내
+- [x] 비밀 키와 DB 비밀번호는 저장소에 올리지 않기, `.env`는 `.gitignore`에 추가
+
+#### T10. Vercel 배포 (푸시 11)
+- [x] GitHub 저장소를 Vercel에 연결하고 배포 설정
+- [x] 배포 주소에서 PRD 수용 기준 점검
+- [x] 배포 주소와 접속 방법을 README에 기록
+
+#### T11. 테스트와 다듬기 (푸시 12)
+- [x] PRD 수용 기준 17개 시나리오 점검
+- [x] 월 전환 시나리오 테스트 (날짜를 바꿔서 검증)
+- [x] 버그 수정, 접근성(키보드 포커스, 색만으로 구분하지 않기) 점검
+- [x] 주간 뷰 삭제로 쓰이지 않는 코드(`weeksOfMonth` 등) 정리
+- [ ] (선택) 백업 JSON 내보내기·가져오기
+
+#### T12. 문서 마무리 (최종 푸시)
+- [x] README 1차 작성(소개, PRD·Todo, 스킬)
+- [x] 완성작 링크와 최종 스크린샷 반영
+- [ ] 느낀 점(직접 작성)
+
+</details>
+
+### 2-4. 처음 계획과 비교
+
+TODO.md의 변경 내역을 네 묶음으로 나눴습니다. 여러 묶음에 걸리는 행은 가장 맞는 곳 하나에만 넣었습니다.
+
+#### 수정한 기능
+
+| 시점 | 항목 | 내용 | 이유 | 관련 커밋 |
+|---|---|---|---|---|
+| T0 | 저장소 초기화 | 새로 초기화하지 않고 원격 `main` 이력 위에서 시작 | 원격에 이미 커밋과 README가 있어서 | `99fe6b6` |
+| T0 | PRD 초과분 규칙 | PRD FR-1과 10장을 자동 다음 달 차감으로 수정 | PRD와 TODO의 내용이 달라서 | `99fe6b6` |
+| T0 | README | 뼈대로 교체하고, T8에서 PRD 전문과 초기 Todo(`docs/initial-todo.md`)를 README에 직접 포함 | README 하나에서 PRD와 처음 계획을 바로 볼 수 있게 하기 위해 (※ 문서 단계는 설계 변경으로 T12로 번호가 바뀜) | `6de2048`, `b6d96d2` |
+| T1 | 손상 데이터 복구 | T1에는 초기화만 넣고, 백업 JSON 가져오기는 T7에서 구현할 때 이 오류 화면에 연결 | JSON 가져오기가 T7의 선택 항목이라서 (※ 선택 항목은 현재 T11) | `6fcc5a4` |
+| 설계 확정 | 정산 마법사 → 정산 이벤트 창 | 전체 화면 마법사 대신 **매달 첫 접속에만** 대시보드 위에 뜨는 창으로 바꿈. 닫기 버튼이 없어 끝내야 닫힘 | 정산은 한 달에 한 번이고, 매일 쓰는 메인 화면이 따로 필요해서 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 정산 단계 구성 | "지난달 결과 → 총 금액 → 배분" 3단계를 **1단계(지난달 처리 + 총 금액), 2단계(분류 배분)** 로 합침. 처음 쓰는 달은 지난달 부분만 빠짐 | 지난달 처리 결과가 총 금액에 바로 반영되는 걸 한 화면에서 보며 정하려고 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 디자인 | 종이 통장(옅은 청록·소나무색) → **연두색 체크 바탕 + 바인더 노트 + 폴더 탭 + 토마토 캐릭터**, 글꼴 `Jua`/`Gowun Dodum` | 사용자가 고른 레퍼런스(미니홈피·노트 느낌)를 따르기 위해 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 기준 화면 | 모바일 시안을 빼고 **데스크톱 기준**으로 변경, 좁은 화면은 깨지지 않는 정도만 지원 | 사용자 결정 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 분류 관리 위치 | 설정 화면의 분류 관리(처음 FR-7) 대신 정산 창에서 추가·삭제. 이름 수정과 설정 화면 관리는 제외 | 분류는 매달 정산할 때 정하는 흐름으로 정리해서 | `2d35949`, `b3d2e94` |
+| 설계 확정 | 저금통 | 저금통 화면과 `사용하기` 삭제. 정산 창의 저축·차감만 유지하고 대시보드에 **잔액만** 표시 | 사용자 결정 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 설정 화면 | 설정을 분류 관리 화면에서 **이번 달 총 금액·분류 배분 수정** 화면으로 바꿈. 합계가 맞고 바뀐 내용이 있을 때만 저장, 이미 쓴 돈보다 적게 정해도 저장하며 초과로 표시, 지난달은 수정 불가 | 한 달 중간에 예산을 고치고 싶어서 (사용자 요청) | `2d35949`, `1c53126`, `faef331` |
+| 설계 확정 | 대시보드 | 처음 계획의 "총 잔액·분류별 잔액 보기"를 **오늘 지출 입력, 오늘 쓴 돈, 이번 달 남은 돈, 저금통 잔액, 분류별 남은 돈**이 있는 메인 화면으로 구체화 | 매일 입력하고 확인하는 화면이 필요해서 (사용자 요청) | `2d35949`, `e180d12`, `5bf53dd` |
+| 설계 확정 | 지출 입력 방식 | 처음 계획의 "날짜를 고르는 입력·수정·삭제"를 둘로 나눔. **대시보드**는 오늘 날짜로만 입력하고 오늘 내역 삭제만, **달력**에서는 이번 달 오늘까지의 날짜에 지출을 **추가·수정·삭제** (오늘 이후와 지난달은 불가) | 대시보드는 오늘 쓴 돈을 빠르게 입력하는 화면으로 두고, 빠뜨린 지출과 수정은 달력에서 하게 하려고 (사용자 결정) | `2d35949`, `e180d12`, `0ea07c8`, `59195b5` |
+| 설계 확정 | 달력 | 달력 칸마다 그날 합계(없으면 `0`)를 보여주고, 날짜를 누르면 오른쪽에 내역과 `이 날 지출 추가`. 지난달은 읽기 전용 | 사용자 요청 | `2d35949`, `80ac6e8`, `59195b5` |
+| 설계 확정 | 안내 문구 정리 | 정산·설정·달력 화면의 설명 문구 일부 삭제 (예: "그냥 두기" 설명 괄호, 합계 안내 줄, 이월·저축 빠른 입력 버튼, 분류 삭제 안내 문구) | 화면을 간결하게 하려는 사용자 결정 | `2d35949` |
+| 설계 확정 | 일정 번호 | 처음 T2~T8을 **T2~T12**로 다시 번호 매김 (처음 T3 지출→T4 대시보드, T4 달력·주간→T5 달력, T5 저금통→삭제, T6 월말 정산→T7, T7 테스트→T11, T8 문서→T12) | 위 변경으로 단계가 늘고 줄어서 | `2d35949` |
+| 설계 확정 | 월/주 계산 유틸 | T1에서 만든 `weeksOfMonth`는 주간 뷰 삭제로 쓰일 곳이 거의 없음. 달력은 월~일 배치만 사용. 정리는 T11에서 | 주간 뷰 삭제 | `2d35949`, `8c23d30` |
+| T9 전 | 로그인 방식 | 아이디(영문·숫자) → 이메일 주소, 이메일 확인 메일 없음 | Supabase 기본 로그인 방식에 맞추고 아이디를 이메일로 바꾸는 우회를 없애려고 | `ff555ea`, `e6f76d8` |
+| T9 전 | DB·서버 구조 | 직접 서버 대신 Supabase와 Vercel을 쓰는 걸로 확정, 제출은 GitHub 저장소 + README 링크 | 과제 요건 확인 | `ff555ea` |
+| T9 | 손상 데이터 복구 | `데이터 초기화`와 두 번 확인을 삭제하고 "데이터를 불러오지 못했어요" + `다시 시도`로 교체. 버전 필드와 형식 검사도 삭제 | 서버 데이터는 잠깐의 연결 실패로도 못 읽을 수 있어서, 초기화를 두면 멀쩡한 데이터를 지울 위험이 있고 형식은 DB가 보장해서 (사용자 결정) | `cc71e89` |
+| T9 | 기존 브라우저 데이터 | Supabase로 옮기지 않음 | 연습용 샘플이라서 (사용자 결정) | `cc71e89` |
+| T12 | README 구조 | 처음 계획의 5개 항목을 제출 형식 4개 부분(소개, PRD·Todo, 스킬, 느낀 점)으로 정리하고 Todo를 README 안에 포함 | 과제 제출 형식에 맞추려고 | 이 커밋 |
+
+#### 테스트 후에 생긴 변화
+
+테스트나 실제 검사가 근거인 변경만 넣었습니다.
+
+| 시점 | 항목 | 내용 | 이유 | 관련 커밋 |
+|---|---|---|---|---|
+| T1 후 | 검증 스크립트 | 임시 폴더의 유틸 테스트와 브라우저 확인 스크립트를 `tests/`로 옮겨 커밋 | T1 계획은 커밋하지 않기로 했지만, 저장소에서 같은 검증을 다시 실행할 수 있게 하기 위해 | `a730463` |
+| T9 | 저장 직후 창 닫기 | 저장 요청에 `keepalive`를 붙여 새로고침이나 창 닫기로 끊기지 않게 함 | 실제 서버 검사에서 저장 직후 새로고침하면 변경이 사라지는 것을 발견해서 | `495ada6` |
+| T3 | 좁은 화면 깨짐 (변경 내역 표에 없음) | 320px에서 칩이 세로로 찌그러지고 금액이 상자 밖으로 나가는 문제를 고치고 검사 추가 | 스크린샷 확인에서 발견 | `3fda17b` |
+
+#### 뺀 항목
+
+| 시점 | 항목 | 내용 | 이유 | 관련 커밋 |
+|---|---|---|---|---|
+| 설계 확정 | 주간 뷰 | 주간 화면과 주간 합계 삭제 (처음 T4의 주간 뷰, FR-5). 달력만 남김 | 사용자 결정 | `2d35949`, `ce9caaf` |
+| 설계 확정 | 미정산 금액 화면 표시 | 처음 계획의 "대시보드에 미정산 금액 표시"를 삭제. "그냥 두기"로 기록한 미정산 금액은 데이터에만 남김 | 화면 설계에서 대시보드에 넣지 않기로 해서 | `2d35949`, `7ecb0e9` |
+| T9 | 브라우저 단계 비밀번호 해시 | T8의 PBKDF2 해시와 브라우저 계정 목록 삭제 | Supabase Auth가 계정과 비밀번호 해시를 맡아서 | `31feb8f` |
+| T11 | 백업 JSON 내보내기·가져오기 | 선택 항목을 구현하지 않고 넘김 | 데이터가 Supabase에 저장되어 브라우저가 바뀌어도 남고, 복구 화면의 초기화도 없어져 쓸 곳이 줄어서 | `8c23d30` |
+| T11 | 쓰이지 않는 코드 | `weeksOfMonth`, `formatSigned`, `.jua`, `.check` 삭제 | 주간 뷰 삭제와 화면 설계 변경으로 테스트 말고는 쓰는 곳이 없어서 | `8c23d30` |
+| T12 | 제출 항목 | T12의 "GitHub 저장소로 제출" 항목 삭제 | 제출은 사용자가 직접 해서 | 이 커밋 |
+
+#### 새로 넣은 항목
+
+| 시점 | 항목 | 내용 | 이유 | 관련 커밋 |
+|---|---|---|---|---|
+| T0 | 세부 규칙 2건 확정 | PRD 10장에 기록: ① 저축+이월은 남은 금액 전액 배분 ② 저금통 차감 후 남은 초과분은 자동으로 다음 달 차감 | 처음 설명에 없던 세부 규칙을 사용자 확인 후 명시하기 위해 | `99fe6b6` |
+| T0 | 스킬 제작 | T0에 `todo-commit-workflow` 스킬 제작 항목을 추가하고 `SKILL.md` 작성 | 스킬 제작을 T0에서 끝내기로 해서 | `b574710` |
+| T1 전 | 초기 Todo 보존 | 첫 커밋의 계획을 `docs/initial-todo.md`로 저장 | 처음 계획과 현재 Todo를 비교할 수 있게 하기 위해 | `a904fc2` |
+| T1 전 | 스킬 원문 보존 | `frontend-design` 원문과 라이선스를 `docs/skills/`에 저장 | 플러그인 설치 없이 저장소에서 참고한 스킬을 확인할 수 있게 하기 위해 | `a191744` |
+| 설계 확정 | 화면 설계와 목업 | 화면을 먼저 설계하고 동작 목업(`docs/mockup.html`)과 화면 문서(`docs/design.md`)를 구현 기준으로 추가 | 구현 전에 화면을 사용자가 직접 보고 정하기 위해 | `2d35949` |
+| 설계 확정 | 분류 | 기본 분류에 **교통** 추가 (식비·의류·취미·교통·기타) | 사용자 요청 | `2d35949`, `c4b4fb2` |
+| 설계 확정 | 분류 추가·삭제 | 정산 창 2단계에서 분류를 추가·삭제 (삭제 확인, 이름 10자 이하·중복 불가, 최소 1개 유지) | 사용자 요청 | `2d35949`, `b3d2e94` |
+| 설계 확정 | 로그인·회원가입 | **아이디(영문·숫자만) + 비밀번호(8자 이상)** 로그인, 소셜 로그인 없음, 로그아웃 버튼 없음, 오류는 입력칸 아래 빨간 글씨 | 사용자 요청 (DB에 사용자별 데이터를 저장하기 위해 필요) | `2d35949`, `5c6f763` |
+| 설계 확정 | DB와 서버 배포 | 처음 계획의 "서버/DB 없이 브라우저 저장(localStorage)"을 바꿔 **DB 연결(T9)과 서버 배포(T10)** 추가. 화면·기능은 먼저 브라우저 저장으로 만들고 마지막에 붙임 | 과제 필수 요건 | `2d35949` |
+| T8 | 로그인 유지 기간 | PRD 11장의 미정 항목을 **브라우저를 닫으면 로그아웃**으로 확정하고 FR-1로 옮김 (`sessionStorage` 사용) | 로그아웃 버튼이 없어서 계정을 바꾸려면 유지 기간이 필요했고, T8 시작 전에 사용자가 결정 | `5c6f763` |
+| T8 | 브라우저 단계 비밀번호 해시 | 서버가 없는 T8에서도 비밀번호를 PBKDF2로 해시해 저장. T9에서 서버 해시로 교체 | PRD가 저장소에 비밀번호 원문을 두지 못하게 해서 | `5c6f763` |
+| T9 | 서버 오류 문구 | FR-1에 "서버 오류, 연결 실패" 안내 추가, 응답을 기다리는 동안 버튼 비활성 | 로그인이 네트워크를 타면서 연결 실패를 "비밀번호가 틀렸다"로 잘못 안내하지 않으려고 | `31feb8f` |
+| T9 | 저장 방식 | 전체를 덮어쓰는 대신 바뀐 행만 한 트랜잭션으로 저장하고, 저장은 순서대로 하나씩 보냄. 실패한 변경은 다음 저장이나 인터넷 복구 때 다시 보냄 | 정산은 여러 테이블을 함께 바꿔서 일부만 저장되면 금액이 어긋나고, 저장 순서가 뒤집히면 옛 값이 남아서 | `80b5041`, `cc71e89` |
+
+#### 변경 내역 원문
+
+<details>
+<summary>변경 내역 전체 표 펼치기</summary>
 
 | 시점 | 구분 | 항목 | 변경 내용 | 이유 |
 |---|---|---|---|---|
@@ -437,24 +691,37 @@
 | T11 | 변경 | 백업 JSON 내보내기·가져오기 | 선택 항목을 구현하지 않고 넘김 | 데이터가 Supabase에 저장되어 브라우저가 바뀌어도 남고, 복구 화면의 초기화도 없어져 쓸 곳이 줄어서 |
 | T11 | 삭제 | 쓰이지 않는 코드 | `weeksOfMonth`, `formatSigned`, `.jua`, `.check` 삭제 | 주간 뷰 삭제와 화면 설계 변경으로 테스트 말고는 쓰는 곳이 없어서 |
 | T9 | 추가 | 저장 직후 창 닫기 | 저장 요청에 `keepalive`를 붙여 새로고침이나 창 닫기로 끊기지 않게 함 | 실제 서버 검사에서 저장 직후 새로고침하면 변경이 사라지는 것을 발견해서 |
+| T12 | 변경 | README 구조 | 처음 계획의 5개 항목을 제출 형식 4개 부분(소개, PRD·Todo, 스킬, 느낀 점)으로 정리하고 Todo를 README 안에 포함 | 과제 제출 형식에 맞추려고 |
+| T12 | 삭제 | 제출 항목 | T12의 "GitHub 저장소로 제출" 항목 삭제 | 제출은 사용자가 직접 해서 |
 
 </details>
 
-## 스킬
+### 2-5. 요약
 
-| 스킬 | 구분 | 용도 |
-|---|---|---|
-| `frontend-design` | 기존 스킬 | 처음 화면 방향과 타이포를 잡는 데 참고. 최종 디자인은 사용자가 고른 레퍼런스(연두색 노트·미니홈피 느낌)를 기준으로 바뀜 |
-| `todo-commit-workflow` | 직접 제작 | Todo 완료 시 변경 내역 기록과 커밋 메시지 작성을 같은 절차로 반복 |
+| 항목 | 수 |
+|---|---|
+| 처음 계획의 단계 | 9개 (T0~T8) |
+| 지금 단계 | 13개 (T0~T12) |
+| 처음 계획의 체크 항목 | 40개 |
+| 지금 체크 항목 | 69개 (완료 67개) |
+| 바뀐 항목 (변경 내역 행) | 43개 (추가 15, 변경 23, 삭제 5) |
 
-### `todo-commit-workflow`
+**커밋 내역**
 
-- **만든 이유:** Todo를 끝낼 때마다 체크박스, 변경 내역, 커밋 메시지를 챙겨야 했는데 매번 빠뜨리기 쉬웠습니다. 절차를 한곳에 적어 두면 같은 순서로 반복할 수 있어서 직접 만들었습니다.
-- **사용 방식:** Claude Code에서 `todo-commit-workflow` 스킬을 불러 Todo 항목을 끝내고 커밋하게 했습니다. 동작 확인, TODO.md 체크, 변경 내역 기록, 커밋, 푸시 판단 순서로 진행합니다.
-- **저장 위치:** [.claude/skills/todo-commit-workflow/SKILL.md](.claude/skills/todo-commit-workflow/SKILL.md)
+전체 내역은 [GitHub 커밋 목록](https://github.com/seun112/ai_project/commits/main)에서 볼 수 있습니다.
+
+![GitHub 커밋 내역](docs/screenshots/commits.png)
+
+## 3. 스킬
+
+### todo-commit-workflow (직접 만든 스킬)
+
+Todo 항목을 끝내고 커밋할 때 쓰는 절차입니다.
+완료 확인, 변경 내역 기록, 커밋 메시지 작성, 커밋, 푸시 판단 순서를 정해 둡니다.
+TODO.md 체크와 변경 내역을 작업 파일과 같은 커밋에 넣게 합니다.
 
 <details>
-<summary>SKILL.md 내용 펼치기</summary>
+<summary>SKILL.md 전문 펼치기</summary>
 
 ````markdown
 ---
@@ -518,6 +785,114 @@ Todo 항목 하나를 끝낼 때마다 아래 순서를 그대로 따른다.
 
 </details>
 
-## 느낀 점과 결론
+**작업에서 어떻게 쓰였는지**
 
-작성 예정
+- T0에서 만들었습니다 (`b574710`).
+- T2에서 Claude Code의 스킬로 불러 썼습니다. 총 금액 설정(`6c17521`)과 T2 남은 항목(`c4b4fb2`, `2f5e972`, `4619091`, `b3d2e94`)을 커밋할 때입니다.
+- T3 이후에는 스킬을 다시 불렀다는 기록이 없습니다. 같은 규칙을 `CLAUDE.md`(`d3629bb`)에 적어 두고 그 절차대로 커밋했습니다.
+
+**이 스킬을 고른 이유**
+
+Todo 완료, 변경 내역 기록, 커밋 메시지 작성을 매번 같은 절차로 하려고 직접 만들었습니다. 커밋 `b574710`의 메시지에도 같은 이유가 적혀 있습니다.
+
+### frontend-design (기존 스킬)
+
+화면을 만들거나 고칠 때 뚜렷하고 의도적인 디자인을 잡도록 돕는 스킬입니다.
+주제에 맞는 시각적 방향, 글꼴, 레이아웃을 정하라고 안내합니다.
+흔한 템플릿처럼 보이는 기본 선택을 피하게 합니다.
+
+<details>
+<summary>frontend-design 전문 펼치기</summary>
+
+````markdown
+---
+name: frontend-design
+description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.
+license: Complete terms in LICENSE.txt
+---
+
+# Frontend Design
+
+Approach this as the design lead at a design studio known for giving every client a distinct visual identity that is not mistaken for anyone else's. This client has already rejected proposals that felt cliché or templated, and is paying for a distinctive point of view: make deliberate, opinionated choices about palette, typography, and layout that are specific to this brief, and take aesthetic risk if justified.
+
+## Ground your designs in the subject matter
+
+If the brief does not identify what the product or subject matter is, identify it yourself before designing, and confirm with the client. You can come up with one concrete subject, the design's audience, and the design's primary job, as a proposal. If there's any information in your memory about the client's preferences or context about what they're building, use that as a hint. The subject's industry, subject matter, materials, and vernacular are where distinctive visual choices come from — a design for a toy for girls aged 8–11 will be very aesthetically different from a dashboard for financial analysts. Build with the brief's real content and subject matter throughout.
+
+## Design principles
+
+For web designs, the hero is the first thing viewers will see. Open with the most characteristic thing in the subject's world, in the form that is most appropriate: a headline, an image, an animation, a live demo, an interactive moment, or other treatments. Be deliberate with your choice: a big number with a small label, supporting stats, and a gradient accent is the default treatment, so only use it if that's truly the best option.
+
+Typography carries the personality of the page. You don't need a different typeface for display or headline text and body content: use one family or two, and if two, make them clearly distinct.
+
+Choose your typefaces deliberately, not the default families you would reach for on any other project, and set a clear type scale following the default guidance of The Elements of Typographic Style with intentional weights, widths, and spacing. When type is used as a headline or visual element, use the type treatment itself as an active part of the design, not a neutral delivery vehicle for the content.
+
+Default to line lengths of less than 80 characters. Serif typefaces can have slightly longer line lengths; give serif body text slightly more line-height than a sans-serif.
+
+Avoid these default typographic treatments; they are the commonest tells of a generated page:
+- Accenting just a single word or phrase in a headline, like putting one word in italic/bold or a different color.
+- Using all caps for labels.
+- Adding unnecessary typographic labels above content.
+
+Visual structure is information. Structural devices like outlines, borders, numbering, eyebrows, dividers, labels, etc., encode useful information about the content rather than decorate it. Many generic designs use numbered markers (01 / 02 / 03), but that's only appropriate if the content actually is a sequence — like a stepped process or a timeline. Before adding numbered markers, check the content really is a sequence.
+
+Use non-user-triggered motion sparingly and deliberately, only to draw attention. A single orchestrated moment — one page-load sequence or one reveal — lands better than scattered effects; fade-and-slide-up entrances on each section and hover transitions on every card are the generic default and read as AI-generated. Motion that answers a person's action (opening, expanding, confirming) is welcome when it shows what changed.
+
+Consider written content carefully. Often a design brief may not contain real content, and it's up to you to come up with copy and placeholder content. Copy can make a design feel as templated as the design itself. See the below section on writing for more guidance.
+
+## Process: plan, review against the brief, build, critique
+
+For calibration, AI-generated design right now clusters around some traits:
+1. a warm cream background (near #F4F1EA) with a high-contrast serif display and a terracotta or warm-clay accent (often near #D97757 — Anthropic's own Claude-interaction accent, so on a user's brief it reads as a tell);
+2. a near-black background with a single bright acid-green or vermilion accent;
+3. a broadsheet-style layout with hairline rules, zero border-radius, and dense newspaper-like columns;
+4. the SaaS-card kit: content chopped into identical rounded cards, one border-radius on everything regardless of hierarchy, the same soft grey shadow (rgba(0,0,0,.1)) under each, and gradient washes as decoration;
+5. template chrome that appears whatever the subject: a tracked-out ALL-CAPS eyebrow label above every heading; meta strings joined with middle dots ('A · B · C'); labels built as 'WORD — fragment' with a spaced em dash; tinted near-black (#0B0B0B, #111) standing in for black; a monospace face for small data labels; a '→' appended to link and button text.
+
+All traits are legitimate for some briefs, but they are defaults rather than choices, and they appear regardless of subject. Where the brief pins down a visual direction, follow it exactly — the brief's own words always win, including when it asks for one of these looks. Where it leaves an axis free, don't spend that freedom on one of these defaults. As with a hired human designer, there's often a careful balance between doing what you're good at and taking each project as a chance to experiment and learn.
+
+Work in two passes. First, brainstorm a short design plan based on the client's design brief: create a compact token system with color, type, layout, and principles.
+- Color: describe the core base palette as 4–6 named hex values.
+- Type: the typefaces and their roles.
+- Layout: a layout concept, using one-sentence prose descriptions and ASCII wireframes to ideate and compare. Include alignment guidance; should the content be left aligned, center aligned, justified?
+- Principles: the high-level guidance for what makes this page unique.
+
+Then review that plan against the brief before building: if any part of it reads like the generic default you would produce for any similar page (work through a similar prompt to see if you arrive somewhere similar) rather than a choice made for this specific brief — revise that part, say what you changed and why. Only after you've confirmed the relative uniqueness of your design plan should you start to write the code, following the revised plan.
+
+When writing the code, be careful of structuring your CSS selector specificities. It's easy to generate CSS classes that cancel each other out (especially with a type-based selector like .section and an element-based selector like .cta). This can happen often with padding/margin between sections.
+
+## Restraint and self-critique
+
+Spend your boldness in one place. Let one element be the memorable thing, keep everything around it quiet and disciplined, and cut any decoration that does not serve the brief. Build to a quality floor without announcing it: responsive down to mobile, visible keyboard focus, reduced motion respected, visually accessible, harmonious color palettes. Critique your own work as you build, taking screenshots to review if your environment supports it — a picture is worth 1000 tokens. Consider Chanel's advice: before leaving the house, take a look in the mirror and remove one accessory. Human creatives have memory and always try to do something new, so if you have a space to quickly jot down notes about what you've tried, it can help you in future passes.
+
+## More on writing in design
+
+Words appear in a design for one reason: to make it easier to understand and use. They are design content, not decoration. Bring the same intentionality and minimalism to copywriting that you would bring to spacing and color. Before writing anything, ask what the design needs to say, and how it can best be said to help the person navigate the experience.
+
+Write from the end user's perspective. Name things by what users will understand in simple language, not by how the system is built. A user manages notifications, not webhook config. Describe what something is or does in plain terms rather than selling it. Being specific and legible to new users is always better than being clever.
+
+Use active voice as default. A CTA says exactly what happens when it is used: "Save changes," not "Submit." An action keeps the same name through the whole flow, so the button that says "Publish" produces a toast that says "Published." The vocabulary of an interface is the signposting for someone navigating the product. Cohesion and consistency are how people learn their way around.
+
+Treat failure and emptiness as moments for direction, not mood. Explain what went wrong and how to fix it, in the interface's voice rather than a person's. Errors don't apologize, and they are never vague about what happened. An empty screen is an invitation to act.
+
+Keep the tone conversational: plain verbs, sentence case, no filler, with tone matched to the brand and the audience. Let each written element do exactly one job.
+````
+
+</details>
+
+라이선스 전문은 [docs/skills/LICENSE.txt](docs/skills/LICENSE.txt)에 있습니다.
+
+**작업에서 어떻게 쓰였는지**
+
+- 처음 계획에서는 T1, T3, T7의 UI 방향, 타이포, 색상을 정할 때 쓰기로 했습니다 (`docs/initial-todo.md`).
+- 실제로는 T0을 끝내기 전에 플러그인의 스킬 파일을 직접 읽어 참고했습니다. 스킬로 호출한 기록은 없고, T3와 T7에서 다시 읽은 기록도 없습니다.
+- 원문과 라이선스는 저장소에서 확인할 수 있게 `docs/skills/`에 넣었습니다 (`a191744`).
+- 첫 화면 골격(`10d1b82`)은 종이 통장 디자인이었습니다. 최종 디자인은 사용자가 고른 레퍼런스(연두색 노트·미니홈피 느낌)를 따랐습니다 (`2d35949`, `ce9caaf`).
+
+**이 스킬을 고른 이유**
+
+화면이 흔한 템플릿처럼 보이지 않게 방향을 잡으려고 골랐습니다. 처음 계획의 용도는 "UI 방향, 타이포, 색상 결정"이고, 스킬 설명에도 템플릿 같은 기본 선택으로 보이지 않게 한다는 내용이 있습니다.
+
+## 4. 느낀 점과 결론
+
+(직접 작성 예정)
