@@ -3,7 +3,6 @@
 매달 쓸 총 금액을 먼저 정하고 분류별로 나눠 쓰면서 남은 돈과 초과분을 관리하는 웹 앱입니다.
 
 - **완성작:** https://aiproject-v5el.vercel.app/
-- **GitHub 저장소:** https://github.com/seun112/ai_project
 
 ## 1. 제작한 것 소개
 
