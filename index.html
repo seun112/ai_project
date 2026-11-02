@@ -198,6 +198,7 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 .memo-wrap { flex: 2 1 160px; }
 .field.full { width: 100%; }
 .piggy-amt { font-size: 24px; }
+.auth-lead { margin: 0; font-size: 15px; }
 .day-total { font-size: 28px; line-height: 1.3; }
 .frow.total-row { min-height: 60px; border-bottom: 2px solid var(--ink); }
 .frow.total-row .field { width: 170px; }
@@ -254,6 +255,8 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 </head>
 <body>
   <p class="save-error" id="save-error" role="alert" hidden>저장하지 못했습니다. 브라우저 저장 공간을 확인한 뒤 다시 시도하세요.</p>
+
+  <div class="auth" id="authview" hidden></div>
 
   <section class="recovery book" id="recovery" hidden>
     <div class="inner">
@@ -366,6 +369,11 @@ legend { padding: 0; margin-bottom: 8px; font-family: 'Jua', 'Gowun Dodum', sans
 // ---- 상수 ----
 
 const STORAGE_KEY = 'living-budget';
+const USERS_KEY = 'living-budget-users';
+const SESSION_KEY = 'living-budget-session';
+const ID_PATTERN = /^[A-Za-z0-9]+$/;
+const PASSWORD_MIN = 8;
+const HASH_ROUNDS = 100000;
 const DATA_VERSION = 1;
 const DEFAULT_CATEGORIES = ['식비', '의류', '취미', '교통', '기타'];
 const CATEGORY_NAME_MAX = 10;
@@ -474,6 +482,12 @@ function formatMonth(monthKey) {
 // ---- 저장소 ----
 
 let state = null;
+let currentUser = null;
+
+// 계정마다 따로 저장한다. T9에서 DB로 바꾸면 이 키는 쓰지 않는다.
+function dataKey(userId) {
+  return `${STORAGE_KEY}:${userId}`;
+}
 
 function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -515,10 +529,10 @@ function isValidData(data) {
 }
 
 // 손상된 값은 읽기만 하고 덮어쓰지 않는다. 지우는 것은 사용자가 고른다.
-function loadData() {
+function loadData(userId) {
   let raw = null;
   try {
-    raw = localStorage.getItem(STORAGE_KEY);
+    raw = localStorage.getItem(dataKey(userId));
   } catch {
     return { status: 'empty', data: createEmptyData() };
   }
@@ -532,9 +546,9 @@ function loadData() {
   }
 }
 
-function saveData(data) {
+function saveData(userId, data) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(dataKey(userId), JSON.stringify(data));
     return true;
   } catch {
     return false;
@@ -542,7 +556,7 @@ function saveData(data) {
 }
 
 function saveState() {
-  document.getElementById('save-error').hidden = saveData(state);
+  document.getElementById('save-error').hidden = saveData(currentUser, state);
 }
 
 // ---- 정산 ----
@@ -1523,6 +1537,174 @@ function handleSettingsClick(event) {
   if (button.dataset.act === 'set-cancel') showView('dashboard');
 }
 
+// ---- 로그인 ----
+
+const TOMATO_LARGE = '<svg width="64" height="64" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="27" r="17" fill="#E8503F" stroke="#2B4A22" stroke-width="3"></circle><path d="M24 12 L19 5 L24 8 L29 5 Z M14 14 L24 11 L34 14 L24 15 Z" fill="#6FB34A" stroke="#2B4A22" stroke-width="2" stroke-linejoin="round"></path><circle cx="18" cy="27" r="2" fill="#2B4A22"></circle><circle cx="30" cy="27" r="2" fill="#2B4A22"></circle><circle cx="14" cy="32" r="2.5" fill="#F7A19A"></circle><circle cx="34" cy="32" r="2.5" fill="#F7A19A"></circle></svg>';
+
+// 입력값은 화면을 다시 그릴 때 속성이 아닌 값으로만 되돌린다. 비밀번호가 HTML에 남지 않게 한다.
+let auth = { mode: 'login', id: '', pw: '', pw2: '', errors: {} };
+
+function readUsers() {
+  try {
+    const users = JSON.parse(localStorage.getItem(USERS_KEY));
+    return isPlainObject(users) ? users : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeUsers(users) {
+  try {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 입력 오류를 칸별로 돌려준다. 비어 있으면 통과다.
+function authErrors({ mode, id, pw, pw2 }, users) {
+  const errors = {};
+  const trimmed = id.trim();
+  if (trimmed === '') errors.id = '아이디를 입력해 주세요.';
+  else if (!ID_PATTERN.test(trimmed)) errors.id = '영문과 숫자만 쓸 수 있어요.';
+  if (pw === '') errors.pw = '비밀번호를 입력해 주세요.';
+  if (mode === 'signup') {
+    if (errors.id === undefined && Object.hasOwn(users, trimmed)) errors.id = '이미 있는 아이디예요.';
+    if (errors.pw === undefined && pw.length < PASSWORD_MIN) errors.pw = '비밀번호는 8자 이상으로 만들어 주세요.';
+    if (pw2 === '') errors.pw2 = '비밀번호를 한 번 더 입력해 주세요.';
+    else if (pw2 !== pw) errors.pw2 = '비밀번호가 서로 달라요.';
+  }
+  return errors;
+}
+
+function toHex(bytes) {
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function newSalt() {
+  return toHex(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+// 브라우저 저장 단계에서도 비밀번호를 그대로 두지 않는다. T9에서 서버 해시로 바꾼다.
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: encoder.encode(salt), iterations: HASH_ROUNDS }, key, 256);
+  return toHex(bits);
+}
+
+function authField(id, label, type, hint, error, autocomplete, red) {
+  const invalid = error || red ? ' aria-invalid="true"' : '';
+  const note = error
+    ? `<span class="err" role="alert">${escapeHtml(error)}</span>`
+    : (hint ? `<span class="sub">${hint}</span>` : '');
+  const plain = type === 'text' ? ' autocapitalize="off" spellcheck="false"' : '';
+  return `<div class="afield"><label for="${id}">${label}</label><input class="field" id="${id}" type="${type}" autocomplete="${autocomplete}"${plain}${invalid}>${note}</div>`;
+}
+
+function renderAuth() {
+  const { mode, errors } = auth;
+  const login = mode === 'login';
+  const fields = login
+    ? authField('a-id', '아이디', 'text', '', errors.id, 'username', errors.idRed)
+      + authField('a-pw', '비밀번호', 'password', '', errors.pw, 'current-password')
+    : authField('a-id', '아이디', 'text', '영문과 숫자만 쓸 수 있어요', errors.id, 'username')
+      + authField('a-pw', '비밀번호', 'password', '8자 이상으로 만들어 주세요', errors.pw, 'new-password')
+      + authField('a-pw2', '비밀번호 확인', 'password', '', errors.pw2, 'new-password');
+  document.getElementById('authview').innerHTML = `<div class="auth-col">
+    <div class="auth-tabs">
+      <button class="tab" type="button" data-auth="login"${login ? ' aria-current="page"' : ''}>로그인</button>
+      <button class="tab" type="button" data-auth="signup"${login ? '' : ' aria-current="page"'}>회원가입</button>
+    </div>
+    <main class="book auth-card">
+      <form class="inner" id="auth-form" novalidate>
+        <div class="auth-head">${TOMATO_LARGE}<h1>생활비 통장</h1><p class="sub auth-lead">${login ? '로그인하고 이번 달 생활비를 관리해요' : '계정을 만들고 생활비 기록을 시작해요'}</p></div>
+        ${fields}
+        <button class="btn go wide" type="submit">${login ? '로그인' : '회원가입'}</button>
+        <p class="auth-foot">${login ? '계정이 없나요? <button type="button" data-auth="signup">회원가입</button>' : '이미 계정이 있나요? <button type="button" data-auth="login">로그인</button>'}</p>
+      </form>
+    </main>
+  </div>`;
+  document.getElementById('a-id').value = auth.id;
+  document.getElementById('a-pw').value = auth.pw;
+  if (!login) document.getElementById('a-pw2').value = auth.pw2;
+}
+
+function showAuth(mode) {
+  auth = { mode, id: '', pw: '', pw2: '', errors: {} };
+  document.getElementById('app').hidden = true;
+  document.getElementById('authview').hidden = false;
+  renderAuth();
+  document.getElementById('a-id').focus();
+}
+
+function showAuthErrors(errors) {
+  auth.errors = errors;
+  renderAuth();
+  document.querySelector('#authview [aria-invalid="true"]')?.focus();
+}
+
+// 로그인 상태는 sessionStorage에만 둔다. 브라우저를 닫으면 끝난다.
+function enterAs(userId) {
+  currentUser = userId;
+  try {
+    sessionStorage.setItem(SESSION_KEY, userId);
+  } catch {
+    // 저장이 막혀도 이번 화면에서는 쓸 수 있다.
+  }
+  document.getElementById('authview').hidden = true;
+  const result = loadData(userId);
+  if (result.status === 'corrupt') {
+    showRecovery();
+    return;
+  }
+  state = result.data;
+  if (result.status === 'empty') saveState();
+  enterApp();
+  showView('dashboard');
+}
+
+async function submitAuth() {
+  const users = readUsers();
+  const errors = authErrors(auth, users);
+  if (Object.keys(errors).length > 0) {
+    showAuthErrors(errors);
+    return;
+  }
+  const id = auth.id.trim();
+  if (auth.mode === 'signup') {
+    const salt = newSalt();
+    users[id] = { salt, passwordHash: await hashPassword(auth.pw, salt), createdAt: getToday() };
+    const saved = writeUsers(users);
+    document.getElementById('save-error').hidden = saved;
+    if (saved) enterAs(id);
+    return;
+  }
+  const user = Object.hasOwn(users, id) ? users[id] : null;
+  if (user === null || await hashPassword(auth.pw, user.salt) !== user.passwordHash) {
+    showAuthErrors({ pw: '아이디 또는 비밀번호가 맞지 않아요.', idRed: true });
+    return;
+  }
+  enterAs(id);
+}
+
+function handleAuthInput(event) {
+  const { id, value } = event.target;
+  if (id === 'a-id') auth.id = value;
+  if (id === 'a-pw') auth.pw = value;
+  if (id === 'a-pw2') auth.pw2 = value;
+}
+
+function sessionUser() {
+  try {
+    const id = sessionStorage.getItem(SESSION_KEY);
+    return id !== null && Object.hasOwn(readUsers(), id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---- 화면 ----
 
 function showView(name) {
@@ -1603,14 +1785,20 @@ function init() {
     if (state !== null && document.visibilityState === 'visible') enterApp();
   });
 
-  const result = loadData();
-  if (result.status === 'corrupt') {
-    showRecovery();
-    return;
-  }
-  state = result.data;
-  if (result.status === 'empty') saveState();
-  enterApp();
+  const authview = document.getElementById('authview');
+  authview.addEventListener('input', handleAuthInput);
+  authview.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitAuth();
+  });
+  authview.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-auth]');
+    if (button !== null) showAuth(button.dataset.auth);
+  });
+
+  const userId = sessionUser();
+  if (userId === null) showAuth('login');
+  else enterAs(userId);
 }
 
 init();

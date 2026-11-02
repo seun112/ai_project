@@ -14,7 +14,7 @@ function load(store = {}) {
     setItem: (k, v) => { store[k] = String(v); },
     removeItem: (k) => { delete store[k]; },
   };
-  const ctx = vm.createContext({ localStorage, console });
+  const ctx = vm.createContext({ localStorage, console, crypto: globalThis.crypto, TextEncoder });
   vm.runInContext(source, ctx);
   return { ctx, store, call: (expr) => JSON.parse(vm.runInContext(`JSON.stringify(${expr})`, ctx)) };
 }
@@ -139,6 +139,40 @@ test('건너뛴 달은 다음 정산의 기준이 되지 않는다', { skip: !ha
   assert.equal(result.sep, true);
 });
 
+test('authErrors', { skip: !has('authErrors') }, () => {
+  const users = q({ tomato1: {} });
+  const errors = (form) => call(`authErrors(${q({ pw: '', pw2: '', ...form })}, ${users})`);
+  assert.deepEqual(errors({ mode: 'login', id: 'tomato1', pw: 'x' }), {}, '로그인은 길이를 보지 않음');
+  assert.deepEqual(errors({ mode: 'login', id: '', pw: '' }), { id: '아이디를 입력해 주세요.', pw: '비밀번호를 입력해 주세요.' });
+  assert.equal(errors({ mode: 'login', id: '토마토', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
+  assert.equal(errors({ mode: 'login', id: 'to mato', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
+  assert.equal(errors({ mode: 'login', id: 'a_b', pw: 'x' }).id, '영문과 숫자만 쓸 수 있어요.');
+
+  const ok = { mode: 'signup', id: 'new1', pw: 'password', pw2: 'password' };
+  assert.deepEqual(errors(ok), {}, '8자는 허용');
+  assert.equal(errors({ ...ok, id: 'tomato1' }).id, '이미 있는 아이디예요.');
+  assert.deepEqual(errors({ ...ok, id: 'constructor' }), {}, '객체 기본 속성 이름도 쓸 수 있음');
+  assert.equal(errors({ ...ok, pw: 'passwor', pw2: 'passwor' }).pw, '비밀번호는 8자 이상으로 만들어 주세요.');
+  assert.equal(errors({ ...ok, pw: '', pw2: 'password' }).pw, '비밀번호를 입력해 주세요.');
+  assert.equal(errors({ ...ok, pw2: '' }).pw2, '비밀번호를 한 번 더 입력해 주세요.');
+  assert.equal(errors({ ...ok, pw2: 'password2' }).pw2, '비밀번호가 서로 달라요.');
+});
+
+test('hashPassword', { skip: !has('hashPassword') }, async () => {
+  const { ctx: c } = load();
+  const hash = (pw, salt) => vm.runInContext(`hashPassword(${q(pw)}, ${q(salt)})`, c);
+  const first = await hash('password1', 'aa');
+  assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(await hash('password1', 'aa'), first, '같은 입력은 같은 해시');
+  assert.notEqual(await hash('password2', 'aa'), first, '비밀번호가 다르면 다른 해시');
+  assert.notEqual(await hash('password1', 'bb'), first, '소금이 다르면 다른 해시');
+  assert.notEqual(vm.runInContext('newSalt()', c), vm.runInContext('newSalt()', c));
+});
+
+test('계정마다 저장 키가 다르다', { skip: !has('dataKey') }, () => {
+  assert.notEqual(call(`dataKey('a')`), call(`dataKey('b')`));
+});
+
 test('categoryNameError', { skip: !has('categoryNameError') }, () => {
   const cats = q([{ name: '식비' }, { name: '교통' }]);
   const error = (name) => call(`categoryNameError(${q(name)}, ${cats})`);
@@ -240,12 +274,13 @@ test('createEmptyData', { skip: !has('createEmptyData') }, () => {
 });
 
 test('loadData 상태 구분', { skip: !has('loadData') }, () => {
-  const KEY = load().call('STORAGE_KEY');
-  assert.equal(load().call('loadData().status'), 'empty');
+  const KEY = load().call(`dataKey('u')`);
+  assert.equal(load().call(`loadData('u').status`), 'empty');
 
   const saved = load();
-  assert.equal(saved.call('saveData(createEmptyData())'), true);
-  assert.equal(load(saved.store).call('loadData().status'), 'ok');
+  assert.equal(saved.call(`saveData('u', createEmptyData())`), true);
+  assert.equal(load(saved.store).call(`loadData('u').status`), 'ok');
+  assert.equal(load(saved.store).call(`loadData('other').status`), 'empty', '다른 계정의 데이터는 읽지 않음');
 
   const good = JSON.parse(saved.store[KEY]);
   const bad = {
@@ -264,7 +299,7 @@ test('loadData 상태 구분', { skip: !has('loadData') }, () => {
   };
   for (const [name, value] of Object.entries(bad)) {
     const t = load({ [KEY]: value });
-    assert.equal(t.call('loadData().status'), 'corrupt', name);
+    assert.equal(t.call(`loadData('u').status`), 'corrupt', name);
     assert.equal(t.store[KEY], value, `${name}: 원본 유지`);
   }
 });
@@ -556,5 +591,5 @@ test('분류 표시', { skip: !has('categoryName') }, () => {
 test('saveData 실패를 false로 알린다', { skip: !has('saveData') }, () => {
   const t = load();
   vm.runInContext(`localStorage.setItem = () => { throw new Error('QuotaExceededError'); };`, t.ctx);
-  assert.equal(t.call('saveData(createEmptyData())'), false);
+  assert.equal(t.call(`saveData('u', createEmptyData())`), false);
 });
